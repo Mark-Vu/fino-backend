@@ -1,0 +1,6 @@
+@fino_backend_HostAddress = http://localhost:5236
+
+GET {{fino_backend_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
