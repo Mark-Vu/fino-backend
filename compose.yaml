@@ -1,0 +1,7 @@
+﻿services:
+  fino-backend:
+    image: fino-backend
+    build:
+      context: .
+      dockerfile: fino-backend/Dockerfile
+
