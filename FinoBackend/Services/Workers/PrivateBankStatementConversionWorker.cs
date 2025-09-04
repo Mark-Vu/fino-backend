@@ -1,7 +1,9 @@
 using Amazon.Textract;
 using Amazon.Textract.Model;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace FinoBackend.Services.BankStatementConverter;
 
@@ -24,133 +26,134 @@ public class PrivateBankStatementConverter
     public async Task<Stream> ConvertPdfToCsvAsync(string s3Key, CancellationToken ct)
     {
         var bucket = _config["S3:Bucket"]
-            ?? throw new InvalidOperationException("Missing S3:Bucket in config");
+                     ?? throw new InvalidOperationException("Missing S3:Bucket in config");
 
-        _logger.LogInformation("Starting Textract analysis for Bucket={Bucket}, Key={Key}", bucket, s3Key);
+        _logger.LogInformation("Starting Textract TABLES analysis for {Bucket}/{Key}", bucket, s3Key);
 
-        // 1) Start async analysis
+        // ---- Start TABLES analysis job ----
         var startReq = new StartDocumentAnalysisRequest
         {
             DocumentLocation = new DocumentLocation
             {
-                S3Object = new Amazon.Textract.Model.S3Object { Bucket = bucket, Name = s3Key }
+                S3Object = new Amazon.Textract.Model.S3Object
+                {
+                    Bucket = bucket,
+                    Name = s3Key
+                }
             },
             FeatureTypes = new List<string> { "TABLES" }
         };
 
         var startResp = await _textract.StartDocumentAnalysisAsync(startReq, ct);
-        var jobId = startResp.JobId;
+        var jobId = startResp.JobId!;
         _logger.LogInformation("Textract job started. JobId={JobId}", jobId);
 
-        // 2) Poll for completion
-        GetDocumentAnalysisResponse firstResp;
-        int polls = 0;
-        var startedAt = DateTime.UtcNow;
+        GetDocumentAnalysisResponse resp;
         do
         {
             await Task.Delay(TimeSpan.FromSeconds(2), ct);
-            polls++;
-            firstResp = await _textract.GetDocumentAnalysisAsync(new GetDocumentAnalysisRequest { JobId = jobId }, ct);
-            _logger.LogInformation("Polling Textract… Attempt={Polls}, Status={Status}", polls, firstResp.JobStatus);
-        }
-        while (firstResp.JobStatus == Amazon.Textract.JobStatus.IN_PROGRESS);
+            resp = await _textract.GetDocumentAnalysisAsync(new GetDocumentAnalysisRequest { JobId = jobId }, ct);
+            _logger.LogInformation("Polling TABLES… Status={Status}", resp.JobStatus);
+        } while (resp.JobStatus == Amazon.Textract.JobStatus.IN_PROGRESS);
 
-        if (firstResp.JobStatus != Amazon.Textract.JobStatus.SUCCEEDED)
+        if (resp.JobStatus != Amazon.Textract.JobStatus.SUCCEEDED)
         {
-            _logger.LogError("Textract failed. JobId={JobId}, Status={Status}", jobId, firstResp.JobStatus);
-            throw new Exception($"Textract failed: {firstResp.JobStatus}");
+            _logger.LogError("Textract failed. JobId={JobId}, Status={Status}", jobId, resp.JobStatus);
+            throw new Exception($"Textract failed: {resp.JobStatus}");
         }
 
-        _logger.LogInformation("Textract SUCCEEDED in {Secs:F1}s. First page blocks={Count}",
-            (DateTime.UtcNow - startedAt).TotalSeconds, firstResp.Blocks.Count);
-
-        // 3) Collect ALL pages via NextToken
-        var allBlocks = new List<Block>(firstResp.Blocks);
-        var next = firstResp.NextToken;
-        while (!string.IsNullOrEmpty(next))
+        // ---- Collect all blocks ----
+        var allBlocks = new List<Block>(resp.Blocks);
+        while (!string.IsNullOrEmpty(resp.NextToken))
         {
-            var pageResp = await _textract.GetDocumentAnalysisAsync(new GetDocumentAnalysisRequest
+            resp = await _textract.GetDocumentAnalysisAsync(new GetDocumentAnalysisRequest
             {
                 JobId = jobId,
-                NextToken = next
+                NextToken = resp.NextToken
             }, ct);
-            allBlocks.AddRange(pageResp.Blocks);
-            next = pageResp.NextToken;
-            _logger.LogInformation("Fetched more blocks: {Added} (total {Total})", pageResp.Blocks.Count, allBlocks.Count);
+            allBlocks.AddRange(resp.Blocks);
         }
-        _logger.LogInformation("Total blocks collected: {Total}", allBlocks.Count);
 
-        // Build a map for relationship lookups
+        _logger.LogInformation("Collected {Count} blocks", allBlocks.Count);
+
         var blockMap = allBlocks.ToDictionary(b => b.Id!, b => b);
-
-        var cells = allBlocks.Where(b => b.BlockType == BlockType.CELL);
-
-        // ---- Step 4: Extract raw rows ----
-        var rawRows = new List<List<string>>();
-        foreach (var pageGroup in cells.GroupBy(c => c.Page).OrderBy(g => g.Key))
-        {
-            foreach (var rowGroup in pageGroup.GroupBy(c => c.RowIndex).OrderBy(g => g.Key))
-            {
-                var ordered = rowGroup.OrderBy(c => c.ColumnIndex).ToList();
-                var values = new List<string>(ordered.Count);
-                foreach (var cell in ordered)
-                    values.Add(GetCellText(cell, blockMap));
-                rawRows.Add(values);
-            }
-        }
-        _logger.LogInformation("Raw rows extracted: {Count}", rawRows.Count);
-
-        // ---- Step 5: Filtering/deduplication ----
-        bool LooksLikeHeader(IReadOnlyList<string> row)
-        {
-            var joined = string.Join(" ", row).ToLowerInvariant();
-            return joined.Contains("date") && joined.Contains("transaction");
-        }
-
-        var dateRegex = new System.Text.RegularExpressions.Regex(
-            @"^(\d{4}[-/])?\d{1,2}([-/]\d{1,2}([-/]\d{2,4})?|\s+[A-Za-z]{3})$",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
-
-        int headerIndex = rawRows.FindIndex(r => r.Count > 0 && LooksLikeHeader(r));
-        if (headerIndex < 0)
-        {
-            _logger.LogWarning("No header row detected; writing all rows unfiltered.");
-            headerIndex = 0;
-        }
-
-        var header = rawRows[headerIndex];
-        string HeaderKey(IReadOnlyList<string> r) =>
-            string.Join("|", r.Select(s => System.Text.RegularExpressions.Regex.Replace((s ?? "").ToLowerInvariant().Trim(), @"\s+", " ")));
-        var headerKey = HeaderKey(header);
+        var tables = allBlocks.Where(b => b.BlockType == BlockType.TABLE).ToList();
+        _logger.LogInformation("Detected {Count} tables", tables.Count);
 
         var sb = new StringBuilder();
 
-        // Write header once
-        sb.AppendLine(string.Join(",", header.Select(CsvEscape)));
+        bool foundFirstHeader = false;
+        string? headerKey = null;
 
-        // Process rows after header
-        for (int i = headerIndex + 1; i < rawRows.Count; i++)
+        foreach (var table in tables)
         {
-            var row = rawRows[i];
-            if (row.Count == 0) continue;
+            var cellIds = table.Relationships?
+                .Where(r => r.Type == RelationshipType.CHILD)
+                .SelectMany(r => r.Ids)
+                .ToHashSet() ?? new HashSet<string>();
 
-            // skip duplicate headers
-            if (LooksLikeHeader(row) && HeaderKey(row) == headerKey)
-                continue;
+            var cells = allBlocks
+                .Where(b => b.BlockType == BlockType.CELL && cellIds.Contains(b.Id));
 
-            var first = (row[0] ?? "").Trim();
+            var allRows = cells
+                .GroupBy(c => c.RowIndex)
+                .OrderBy(g => g.Key)
+                .Select(g => g.OrderBy(c => c.ColumnIndex).Select(c => GetCellText(c, blockMap)).ToList())
+                .ToList();
 
-            // keep only rows whose first cell looks like a date
-            if (!dateRegex.IsMatch(first))
-                continue;
+            if (allRows.Count == 0) continue;
 
-            sb.AppendLine(string.Join(",", row.Select(CsvEscape)));
+            // --- If we haven’t found the first header yet ---
+            if (!foundFirstHeader)
+            {
+                int headerIndex = allRows.FindIndex(LooksLikeHeader);
+                if (headerIndex < 0) continue; // skip until we find one
+
+                foundFirstHeader = true;
+                var filteredRows = allRows.Skip(headerIndex).ToList();
+                headerKey = RowKey(filteredRows.First());
+
+                foreach (var row in filteredRows)
+                {
+                    if (row.All(string.IsNullOrWhiteSpace)) continue;
+                    sb.AppendLine(string.Join(",", row.Select(CsvEscape)));
+                }
+            }
+            else
+            {
+                // After first header is found, keep all rows but skip dup headers/empty
+                foreach (var row in allRows)
+                {
+                    if (row.All(string.IsNullOrWhiteSpace)) continue;
+
+                    var rowKey = RowKey(row);
+                    if (headerKey != null && rowKey == headerKey) continue; // skip duplicate header
+
+                    sb.AppendLine(string.Join(",", row.Select(CsvEscape)));
+                }
+            }
         }
 
-        _logger.LogInformation("Filtered CSV rows: {Rows}", sb.ToString().Split('\n').Count(l => !string.IsNullOrWhiteSpace(l)));
+        _logger.LogInformation("CSV extraction completed. Lines={Lines}",
+            sb.ToString().Split('\n').Count(l => !string.IsNullOrWhiteSpace(l)));
 
         return new MemoryStream(Encoding.UTF8.GetBytes(sb.ToString()));
     }
+
+    // ----------------- Helpers -----------------
+
+    private static bool LooksLikeHeader(IReadOnlyList<string> row)
+    {
+        var j = string.Join(' ', row).ToLowerInvariant();
+        bool hasDate = j.Contains("date");
+        bool hasTxn = j.Contains("transaction") || j.Contains("description") ||
+                      j.Contains("details") || j.Contains("narration") ||
+                      j.Contains("particulars");
+        return hasDate && hasTxn;
+    }
+
+    private static string RowKey(IReadOnlyList<string> row) =>
+        string.Join("|", row.Select(s => (s ?? string.Empty).Trim().ToLowerInvariant()));
 
     private static string GetCellText(Block cell, IDictionary<string, Block> blockMap)
     {
@@ -175,14 +178,14 @@ public class PrivateBankStatementConverter
                 }
             }
         }
-        return System.Text.RegularExpressions.Regex.Replace(string.Join(" ", parts), @"\s+", " ").Trim();
+        return Regex.Replace(string.Join(" ", parts), @"\s+", " ").Trim();
     }
 
     private static string CsvEscape(string v)
     {
-        if (string.IsNullOrEmpty(v)) return "";
-        if (v.IndexOfAny(new[] { ',', '"', '\n', '\r' }) >= 0)
-            return $"\"{v.Replace("\"", "\"\"")}\"";
-        return v;
+        if (string.IsNullOrEmpty(v)) return string.Empty;
+        return v.IndexOfAny(new[] { ',', '"', '\n', '\r' }) >= 0
+            ? $"\"{v.Replace("\"", "\"\"")}\""
+            : v;
     }
 }

@@ -141,10 +141,10 @@ public class StorageService
             if (size > Constants.MAX_FILE_SIZE_BYTES)
             {
                 await _s3.DeleteObjectAsync(_bucket, key, ct); 
-                return (true, true, size);   
+                return (true, false, size);   
             }
 
-            return (true, false, size);
+            return (true, true, size);
         }
         catch (AmazonS3Exception ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
         {
