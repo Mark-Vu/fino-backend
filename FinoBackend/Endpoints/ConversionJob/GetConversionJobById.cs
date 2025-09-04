@@ -21,25 +21,16 @@ public class GetConversionJobById
     public override void Configure()
     {
         Get("/conversion-jobs/{JobId}");
-        Roles("authenticated");
+        AllowAnonymous();
     }
 
     public override async Task HandleAsync(GetConversionJobByIdRequest req, CancellationToken ct)
     {
         _logger.LogInformation("Starting GetConversionJobById {@req}", req);
-
-        var sub = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var userId = Guid.Parse(sub);
-
         var job = await _conversionJobService.GetJobByIdAsync(req.JobId, ct);
         if (job == null)
         {
             throw new NotFoundException();
-        }
-
-        if (job.BankStatementFile.UserId != userId)
-        {
-            throw new ForbiddenException();
         }
         _logger.LogInformation("Ending GetConversionJobById {@req}", req);
         await Send.OkAsync(job, ct);

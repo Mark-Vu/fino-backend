@@ -10,6 +10,14 @@ output "sqs_queue_arn" {
   value = aws_sqs_queue.conversion_jobs.arn
 }
 
+output "public_sqs_queue_url" {
+  value = aws_sqs_queue.public_conversion_jobs.id
+}
+
+output "public_sqs_queue_arn" {
+  value = aws_sqs_queue.public_conversion_jobs.arn
+}
+
 output "textract_policy_arn" {
   value = aws_iam_policy.textract_policy.arn
 }

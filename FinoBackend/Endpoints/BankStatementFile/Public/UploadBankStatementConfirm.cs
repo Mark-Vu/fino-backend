@@ -32,57 +32,52 @@ public class UploadBankStatementConfirm : Endpoint<UploadBankStatementConfirmReq
     public override void Configure()
     {
         // name parameter to match DTO property for binding
-        Post("/bank-statement-files/{FileId:guid}/confirm");
-        Roles("authenticated");
+        Post("/public/bank-statement-files/{FileId:guid}/confirm");
+        AllowAnonymous();
     }
 
     public override async Task HandleAsync(UploadBankStatementConfirmRequest req, CancellationToken ct)
     {
         _logger.LogInformation("Confirming Bank Statement File Upload");
-        var sub = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (Guid.Parse(sub) != req.UserId)
-        {
-            throw new UnauthorizedException();
-        }
 
-        var key = _storage.GetPrivatePdfUploadKey(req.UserId, req.FileId);
+        var key = _storage.GetPublicPdfUploadKey(req.FileId);
+        var jobId = Guid.NewGuid();
 
-        // Verify S3 object & get metadata via StorageService
-        var meta = await _storage.TryHeadAsync(key, ct);
-        if (meta is null)
-        {
-            throw new BadRequestException();
-        }
+        var validation = await _storage.ValidateFileAsync(key, ct);
+        if (!validation.Exists)
+            throw new BadRequestException("File not found in storage.");
+
+        if (!validation.ValidFileSize)
+            throw new BadRequestException($"File exceeds max size of 50MB. Actual size: {validation.size / (1024*1024)} MB");
+
+        var messageToMessageQueue = new ConversionJobMessage( 
+            JobId: jobId, FileId: req.FileId, UserId:null);
 
         var file = await _bankStatementService.CreateBankStatementFileAsync(
-            id: req.FileId,
-            userId: req.UserId,
-            pdf_file_key: key,
-            csv_file_key: string.Empty,
-            ct
-            );
+            userId: null,
+            pdfFileKey: key,
+            bankStatementFileId: req.FileId,
+            OriginalFileName:  req.FileName,
+            ct: ct);
 
         var job = await _conversionJobService.CreateAsync(
-            file.Id,
+            bankStatementFileId: file.Id,
+            jobId: jobId,
             ct
         );
-                    var csvKey = _storage.GetPrivateCsvResultKey(job.BankStatementFile.UserId, job.Id);
+        var csvKey = _storage.GetPublicCsvResultKey(job.Id);
         
         
         var response = new UploadBankStatementConfirmResponse(
             Job: job
         );
-
-        var messageToMessageQueue = new ConversionJobMessage(
-            JobId: job.Id,
-            UserId: req.UserId,
-            FileId: file.Id);
         
-        await _messageQueueService.EnqueueJobAsync(
+        var queueUrl = await _messageQueueService.EnqueueJobAsync(
             messageToMessageQueue,
+            isPublic: true,
             ct
         );
-        _logger.LogInformation("Bank Statement Upload File confirmed. Sending conversion job to Message Queue: {@message}", messageToMessageQueue);
+        _logger.LogInformation("Enqueued {@message} in {@QueueUrl}", messageToMessageQueue, queueUrl);
 
         await Send.OkAsync(response, ct);
     }
@@ -90,12 +85,13 @@ public class UploadBankStatementConfirm : Endpoint<UploadBankStatementConfirmReq
 
 public record UploadBankStatementConfirmRequest(
     [Required]
-    Guid UserId,
+    Guid FileId,
     [Required]
-    Guid FileId);
+    string FileName
+    );
 
 public record UploadBankStatementConfirmResponse(
      Models.ConversionJob Job
     );
 
-public record ConversionJobMessage(Guid JobId, Guid FileId, Guid UserId);
+public record ConversionJobMessage(Guid JobId, Guid FileId, Guid? UserId);

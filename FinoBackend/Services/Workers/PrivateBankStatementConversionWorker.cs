@@ -3,18 +3,18 @@ using Amazon.Textract.Model;
 using Microsoft.Extensions.Logging;
 using System.Text;
 
-namespace FinoBackend.Services;
+namespace FinoBackend.Services.BankStatementConverter;
 
-public class BankStatementConverter
+public class PrivateBankStatementConverter
 {
     private readonly IAmazonTextract _textract;
     private readonly IConfiguration _config;
-    private readonly ILogger<BankStatementConverter> _logger;
+    private readonly ILogger<PrivateBankStatementConverter> _logger;
 
-    public BankStatementConverter(
+    public PrivateBankStatementConverter(
         IAmazonTextract textract,
         IConfiguration config,
-        ILogger<BankStatementConverter> logger)
+        ILogger<PrivateBankStatementConverter> logger)
     {
         _textract = textract;
         _config = config;

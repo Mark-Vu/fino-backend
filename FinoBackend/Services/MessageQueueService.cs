@@ -16,9 +16,10 @@ public class MessageQueueService
         _config = config;
     }
 
-    public async Task EnqueueJobAsync(ConversionJobMessage message, CancellationToken ct = default)
+    public async Task<string> EnqueueJobAsync(ConversionJobMessage message, bool isPublic, CancellationToken ct = default)
     {
-        var queueUrl = _config["SQS:QueueUrl"];
+        var queueUrl = isPublic ? _config["SQS:PublicQueueUrl"] : _config["SQS:QueueUrl"];
+        
         var body = JsonSerializer.Serialize(message);
 
         var request = new SendMessageRequest
@@ -28,5 +29,6 @@ public class MessageQueueService
         };
 
         await _sqs.SendMessageAsync(request, ct);
+        return queueUrl;
     }
 }

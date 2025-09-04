@@ -3,6 +3,7 @@ using Amazon.SQS.Model;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 using FinoBackend.Data;
+using FinoBackend.Services.BankStatementConverter;
 
 namespace FinoBackend.Services.Workers;
 
@@ -11,36 +12,36 @@ namespace FinoBackend.Services.Workers;
 /// downloads PDFs from S3, converts them to CSV, uploads results, 
 /// and updates the database.
 /// </summary>
-public class BankStatementConversionWorker : BackgroundService
+public class PrivateBankStatementConversionWorker : BackgroundService
 {
     private readonly IAmazonSQS _sqs;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IConfiguration _config;
     private readonly StorageService _storage;
-    private readonly ILogger<BankStatementConversionWorker> _logger;
-    private readonly BankStatementConverter _bankStatementConverter;
+    private readonly ILogger<PublicBankStatementConversionWorker> _logger;
+    private readonly PrivateBankStatementConverter _privateBankStatementConverter;
 
-    public BankStatementConversionWorker(
+    public PrivateBankStatementConversionWorker(
         IAmazonSQS sqs,
         IServiceScopeFactory scopeFactory,
         IConfiguration config,
         StorageService storage,
-        ILogger<BankStatementConversionWorker> logger,
-        BankStatementConverter bankStatementConverter)
+        ILogger<PublicBankStatementConversionWorker> logger,
+        PrivateBankStatementConverter privateBankStatementConverter)
     {
         _sqs = sqs;
         _scopeFactory = scopeFactory;
         _config = config;
         _storage = storage;
         _logger = logger;
-        _bankStatementConverter = bankStatementConverter;
+        _privateBankStatementConverter = privateBankStatementConverter;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var queueUrl = _config["SQS:QueueUrl"]
                        ?? throw new InvalidOperationException("Missing SQS:QueueUrl in configuration");
-        _logger.LogInformation("BankStatementConversionWorker started. Listening on {@QueueUrl}", queueUrl);
+        _logger.LogInformation("PrivateBankStatementConversionWorker started. Listening on {@QueueUrl}", queueUrl);
         while (!stoppingToken.IsCancellationRequested)
         {
             _logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
@@ -55,7 +56,7 @@ public class BankStatementConversionWorker : BackgroundService
             {
                 try
                 {
-                    var jobMessage = JsonSerializer.Deserialize<ConversionJobMessage>(msg.Body);
+                    var jobMessage = JsonSerializer.Deserialize<PrivateConversionJobMessage>(msg.Body);
                     _logger.LogInformation("Job received {@JobMessage}", jobMessage);
                     
                     if (jobMessage is null) continue;
@@ -74,11 +75,11 @@ public class BankStatementConversionWorker : BackgroundService
                     job.StartedAt = DateTime.UtcNow;
                     await db.SaveChangesAsync(stoppingToken);
 
-                    // Convert to CSV (stub)
-                    var csvStream = await _bankStatementConverter.ConvertPdfToCsvAsync(job.BankStatementFile.PdfFileKey, stoppingToken);
+                    // Convert to CSV 
+                    var csvStream = await _privateBankStatementConverter.ConvertPdfToCsvAsync(job.BankStatementFile.PdfFileKey, stoppingToken);
 
                     // Upload result to S3
-                    var csvKey = _storage.GetPrivateCsvResultKey(job.BankStatementFile.UserId, job.Id);
+                    var csvKey = _storage.GetPublicCsvResultKey(job.Id);
                     await _storage.UploadAsync(csvKey, csvStream, "text/csv", stoppingToken);
 
                     // Update DB
@@ -94,11 +95,10 @@ public class BankStatementConversionWorker : BackgroundService
                 catch (Exception ex)
                 {
                     Console.WriteLine($"Worker error: {ex.Message}");
-                    // ⚠️ do not delete message; it will become visible again after VisibilityTimeout
                 }
             }
         }
     }
     
 }
-public record ConversionJobMessage(Guid JobId, Guid FileId, Guid UserId);
+public record PrivateConversionJobMessage(Guid JobId, Guid FileId, Guid UserId);

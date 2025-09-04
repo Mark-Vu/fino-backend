@@ -6,6 +6,7 @@ using FastEndpoints.Swagger;
 using FinoBackend.Common.Extensions;
 using FinoBackend.Data;
 using FinoBackend.Services;
+using FinoBackend.Services.BankStatementConverter;
 using FinoBackend.Services.Workers;
 using Microsoft.EntityFrameworkCore;
 
@@ -47,11 +48,13 @@ builder.Services.AddProblemDetails(options =>
 builder.Services.AddAuthorization();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddSingleton<StorageService>();
-builder.Services.AddSingleton<BankStatementConverter>();
 builder.Services.AddScoped<ConversionJobService>();
 builder.Services.AddScoped<BankStatementService>();
 builder.Services.AddScoped<MessageQueueService>();
-builder.Services.AddHostedService<BankStatementConversionWorker>();
+builder.Services.AddSingleton<PublicBankStatementConverter>();
+builder.Services.AddHostedService<PublicBankStatementConversionWorker>();
+builder.Services.AddSingleton<PrivateBankStatementConverter>();
+builder.Services.AddHostedService<PrivateBankStatementConversionWorker>();
 
 var app = builder.Build();
 
@@ -60,7 +63,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseFastEndpoints(c =>
 {
-    c.Endpoints.RoutePrefix = "api"; // 👈 adds /api to all routes
+    c.Endpoints.RoutePrefix = "api"; 
 })
 .UseSwaggerGen();
 app.UseGlobalExceptionHandler();

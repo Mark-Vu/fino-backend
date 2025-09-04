@@ -16,26 +16,29 @@ public class BankStatementService
     }
     
     public async Task<BankStatementFile> CreateBankStatementFileAsync(
-        Guid id,
-        Guid userId,
-        string pdf_file_key,
-        string csv_file_key,
+        Guid? userId,
+        string pdfFileKey,
+        string OriginalFileName,
+        Guid? bankStatementFileId = null,
         CancellationToken ct = default)
     {
-        _logger.LogInformation("Creating bank statement file");
+        var id = bankStatementFileId ?? Guid.NewGuid();
+
         var file = new BankStatementFile
         {
             Id = id,
             UserId = userId,
-            PdfFileKey = pdf_file_key,
-            CsvFileKey = csv_file_key,
+            OwnerType = userId.HasValue ? OwnerType.AuthenticatedUser : OwnerType.Anonymous,
+            OriginalFileName = OriginalFileName,
+            PdfFileKey = pdfFileKey,
+            CsvFileKey = null,
         };
 
-        await _db.BankStatementFiles.AddAsync(file);
+        _db.BankStatementFiles.Add(file);
         await _db.SaveChangesAsync(ct);
-        _logger.LogInformation("Ending creating bank statement file");
         return file;
     }
+
     
 
     public async Task<BankStatementFile?> GetBankStatementFileByIdAsync(Guid id, CancellationToken ct = default)

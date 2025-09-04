@@ -15,11 +15,17 @@ public class ConversionJobService
     }
 
     // Create new job for a given BankStatementFile
-    public async Task<ConversionJob> CreateAsync(Guid bankStatementFileId, CancellationToken ct = default)
+    public async Task<ConversionJob> CreateAsync(Guid bankStatementFileId,
+                                                    Guid jobId = default,
+                                                    CancellationToken ct = default)
     {
         _logger.LogInformation("Creating conversion job");
+        if (jobId == Guid.Empty)
+            jobId = Guid.NewGuid();
+        
         var job = new ConversionJob
         {
+            Id = jobId,
             BankStatementFileId = bankStatementFileId,
             Status = JobStatus.Pending,
             ErrorMessage = null,
