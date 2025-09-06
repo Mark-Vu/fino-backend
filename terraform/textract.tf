@@ -28,7 +28,7 @@ data "aws_iam_policy_document" "textract_policy_doc" {
 }
 
 resource "aws_iam_policy" "textract_policy" {
-  name        = "${var.project_name}-textract-rw"
+  name        = "${var.project_name}-textract-read-write"
   description = "Allow Textract (Start/Get) and S3 read/write for PDFs/CSV"
   policy      = data.aws_iam_policy_document.textract_policy_doc.json
 }

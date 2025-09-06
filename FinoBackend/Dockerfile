@@ -1,23 +1,23 @@
-﻿FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
-USER $APP_UID
+﻿# Runtime
+FROM mcr.microsoft.com/dotnet/nightly/aspnet:10.0 AS base
 WORKDIR /app
 EXPOSE 8080
-EXPOSE 8081
+ENV ASPNETCORE_URLS=http://+:8080
 
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
-ARG BUILD_CONFIGURATION=Release
+# Build
+FROM mcr.microsoft.com/dotnet/nightly/sdk:10.0 AS build
 WORKDIR /src
-COPY ["fino-backend/fino-backend.csproj", "fino-backend/"]
-RUN dotnet restore "fino-backend/fino-backend.csproj"
+
+# copy csproj first for restore caching
+COPY FinoBackend.csproj ./
+RUN dotnet restore "FinoBackend.csproj"
+
+# copy the rest and publish
 COPY . .
-WORKDIR "/src/fino-backend"
-RUN dotnet build "./fino-backend.csproj" -c $BUILD_CONFIGURATION -o /app/build
+RUN dotnet publish "FinoBackend.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
-FROM build AS publish
-ARG BUILD_CONFIGURATION=Release
-RUN dotnet publish "./fino-backend.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
-
+# final
 FROM base AS final
 WORKDIR /app
-COPY --from=publish /app/publish .
-ENTRYPOINT ["dotnet", "fino-backend.dll"]
+COPY --from=build /app/publish .
+ENTRYPOINT ["dotnet","FinoBackend.dll"]

@@ -1,5 +1,5 @@
 resource "aws_s3_bucket" "bank_statement_converter" {
-  bucket = "${var.project_name}-bucket-prod"
+  bucket = "${var.project_name}-bucket-production"
 
   tags = {
     Project = var.project_name
@@ -43,7 +43,8 @@ resource "aws_s3_bucket_cors_configuration" "bank_statement_converter" {
     allowed_methods = ["GET", "PUT", "POST", "DELETE", "HEAD"]
     allowed_origins = [
       "http://localhost:3000",
-      "https://www.finotools.app"
+      "https://finotools.app",
+      "https://api.finotools.app"
     ]
     expose_headers  = ["ETag", "Content-Length"]
     max_age_seconds = 3000

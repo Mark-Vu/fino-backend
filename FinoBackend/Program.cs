@@ -1,3 +1,5 @@
+using Amazon;
+using Amazon.Runtime;
 using Amazon.S3;
 using Amazon.SQS;
 using Amazon.Textract;
@@ -11,10 +13,15 @@ using FinoBackend.Services.Workers;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddDefaultAWSOptions(builder.Configuration.GetAWSOptions());
-builder.Services.AddSingleton<IAmazonS3>(_ => new AmazonS3Client());
-builder.Services.AddSingleton<IAmazonSQS>(_ => new AmazonSQSClient());
-builder.Services.AddSingleton<IAmazonTextract>(_ => new AmazonTextractClient());
+var awsOptions = builder.Configuration.GetSection("AWS").Get<AwsConfig>();
+
+var awsCredentials = new BasicAWSCredentials(awsOptions.AccessKey, awsOptions.SecretKey);
+var region = RegionEndpoint.GetBySystemName(awsOptions.Region);
+
+builder.Services.AddSingleton<IAmazonS3>(_ => new AmazonS3Client(awsCredentials, region));
+builder.Services.AddSingleton<IAmazonSQS>(_ => new AmazonSQSClient(awsCredentials, region));
+builder.Services.AddSingleton<IAmazonTextract>(_ => new AmazonTextractClient(awsCredentials, region));
+
 
 // === Database ===
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
