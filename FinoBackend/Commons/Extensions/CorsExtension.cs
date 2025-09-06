@@ -14,7 +14,7 @@ public static class CorsExtension
         var origins = new[]
         {
             "http://localhost:3000",
-            "https://www.finotools.app"
+            "https://finotools.app"
         };
 
         services.AddCors(opt =>

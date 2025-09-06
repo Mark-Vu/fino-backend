@@ -1,7 +1,3 @@
-########################
-# textract.tf
-########################
-
 # IAM policy that allows Textract (async) + S3 read/write on your existing bucket
 data "aws_iam_policy_document" "textract_policy_doc" {
   statement {
