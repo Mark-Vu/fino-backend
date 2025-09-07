@@ -10,7 +10,8 @@ public class BankStatementFile : BaseModel
     public Guid? UserId { get; set; }
     public OwnerType OwnerType { get; set; } = OwnerType.AuthenticatedUser;
 
-    public string PdfFileKey { get; set; } = string.Empty; 
+    public string UploadedFileKey { get; set; } = string.Empty; 
+    public FileExtension FileExtension { get; set; } = FileExtension.Pdf;
     public string OriginalFileName { get; set; } = string.Empty;
     public string? CsvFileKey { get; set; }             
 

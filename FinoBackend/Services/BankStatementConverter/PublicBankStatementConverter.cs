@@ -12,29 +12,29 @@ namespace FinoBackend.Services.Workers;
 /// downloads PDFs from S3, converts them to CSV, uploads results, 
 /// and updates the database.
 /// </summary>
-public class PublicBankStatementConversionWorker : BackgroundService
+public class PublicBankStatementConverter : BackgroundService
 {
     private readonly IAmazonSQS _sqs;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IConfiguration _config;
     private readonly StorageService _storage;
-    private readonly ILogger<PublicBankStatementConversionWorker> _logger;
-    private readonly PublicBankStatementConverter _publicBankStatementConverter;
+    private readonly ILogger<PublicBankStatementConverter> _logger;
+    private readonly BankStatementConverter.PublicBankStatementConversionWorker _publicBankStatementConversionWorker;
 
-    public PublicBankStatementConversionWorker(
+    public PublicBankStatementConverter(
         IAmazonSQS sqs,
         IServiceScopeFactory scopeFactory,
         IConfiguration config,
         StorageService storage,
-        ILogger<PublicBankStatementConversionWorker> logger,
-        PublicBankStatementConverter publicBankStatementConverter)
+        ILogger<PublicBankStatementConverter> logger,
+        BankStatementConverter.PublicBankStatementConversionWorker publicBankStatementConversionWorker)
     {
         _sqs = sqs;
         _scopeFactory = scopeFactory;
         _config = config;
         _storage = storage;
         _logger = logger;
-        _publicBankStatementConverter = publicBankStatementConverter;
+        _publicBankStatementConversionWorker = publicBankStatementConversionWorker;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -77,10 +77,10 @@ public class PublicBankStatementConversionWorker : BackgroundService
                     await db.SaveChangesAsync(stoppingToken);
 
                     // 1) Download PDF from S3
-                    var pdfStream = await _storage.DownloadAsync(job.BankStatementFile.PdfFileKey, stoppingToken);
+                    var pdfStream = await _storage.DownloadAsync(job.BankStatementFile.UploadedFileKey, stoppingToken);
 
                     // 2) Convert PDF → CSV
-                    var csvStream = await _publicBankStatementConverter.ConvertPdfToCsvAsync(pdfStream, stoppingToken);
+                    var csvStream = await _publicBankStatementConversionWorker.ConvertPdfToCsvAsync(pdfStream, stoppingToken);
 
                     // 3) Upload result to S3
                     var csvKey = _storage.GetPublicCsvResultKey(job.Id);

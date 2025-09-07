@@ -3,6 +3,7 @@ using System.Security.Claims;
 using FastEndpoints;
 using FinoBackend.Common;
 using FinoBackend.Services;
+using FinoBackend.Models;
 
 namespace FinoBackend.Endpoints.BankStatementFile;
 
@@ -31,7 +32,6 @@ public class UploadMultipleBankStatementsConfirm
 
     public override void Configure()
     {
-        // Batch confirm (no per-id in the route)
         Post("/private/bank-statement-files/confirm-multiple");
         Roles("authenticated");
     }
@@ -39,20 +39,16 @@ public class UploadMultipleBankStatementsConfirm
     public override async Task HandleAsync(UploadMultipleBankStatementsConfirmRequest req, CancellationToken ct)
     {
         _logger.LogInformation("Confirming batch upload for MultipleBankStatements");
-        _logger.LogInformation("Batch upload for MultipleBankStatements");
+
         var sub = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (!Guid.TryParse(sub, out var authUserId) || authUserId != req.UserId)
             throw new UnauthorizedException();
 
-        if (req.FileIds is null || req.FileIds.Count == 0)
-            throw new BadRequestException("No FileIds provided.");
+        if (req.Files is null || req.Files.Count == 0)
+            throw new BadRequestException("No files provided.");
 
-        // Build S3 keys from the provided FileIds
-        var keys = req.FileIds
-            .Select(fileId => _storage.GetPrivatePdfUploadKey(authUserId, fileId))
-            .ToList();
-
-        // Validate all files in S3 (exists + size <= MAX)
+        // Collect all file keys for batch validation
+        var keys = req.Files.Select(f => f.FileKey).ToList();
         var (allValid, results) = await _storage.ValidateMultipleFilesAsync(keys, ct);
         if (!allValid)
         {
@@ -62,35 +58,26 @@ public class UploadMultipleBankStatementsConfirm
 
         var createdJobs = new List<Models.ConversionJob>();
 
-        // Create DB rows + jobs and enqueue each
-        for (int i = 0; i < req.FileIds.Count; i++)
+        foreach (var spec in req.Files)
         {
-            var fileId = req.FileIds[i];
-            var originalFileName = req.FileNames[i];
-            var key = keys[i];
+            var fileExt = FileExtensionHelper.Parse(spec.FileExtension);
 
             // Insert/confirm BankStatementFile row
             var file = await _bankStatementService.CreateBankStatementFileAsync(
                 userId: req.UserId,
-                pdfFileKey: key,
+                fileKey: spec.FileKey,
+                fileExtension: fileExt,
                 ct: ct,
-                OriginalFileName: originalFileName,
-                bankStatementFileId: fileId);
+                OriginalFileName: spec.FileName,
+                bankStatementFileId: spec.FileId);
 
-            // Create Job (explicit jobId to keep things deterministic if you like)
             var jobId = Guid.NewGuid();
+            var csvKey = _storage.GetPrivateCsvResultKey(req.UserId, jobId);
 
-            // Compute CSV result key if needed by the job/queue
-            var csvKey = _storage.GetPrivateCsvResultKey(authUserId, jobId);
-
-            // Enqueue message to start conversion
             var message = new ConversionJobMessage(jobId, file.Id, file.UserId);
-            
-            var job = await _conversionJobService.CreateAsync(
-                file.Id,
-                jobId,
-                ct);
-            var queueUrl = await _messageQueueService.EnqueueJobAsync(message,isPublic: false, ct);
+
+            var job = await _conversionJobService.CreateAsync(file.Id, jobId, ct);
+            var queueUrl = await _messageQueueService.EnqueueJobAsync(message, isPublic: false, ct);
 
             _logger.LogInformation("Enqueued file {FileId}: {@message} to {QueueUrl}", file.Id, message, queueUrl);
             createdJobs.Add(job);
@@ -101,10 +88,18 @@ public class UploadMultipleBankStatementsConfirm
     }
 }
 
+// --- Request/Response Models ---
+
 public record UploadMultipleBankStatementsConfirmRequest(
     [Required] Guid UserId,
-    [Required] List<Guid> FileIds,
-    [Required] List<string> FileNames
+    [Required] List<FileConfirmSpec> Files
+);
+
+public record FileConfirmSpec(
+    [Required] Guid FileId,
+    [Required] string FileName,
+    [Required] string FileKey,
+    [Required] string FileExtension
 );
 
 public record UploadMultipleBankStatementsConfirmResponse(

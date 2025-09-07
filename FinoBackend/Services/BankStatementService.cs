@@ -17,8 +17,9 @@ public class BankStatementService
     
     public async Task<BankStatementFile> CreateBankStatementFileAsync(
         Guid? userId,
-        string pdfFileKey,
+        string fileKey,
         string OriginalFileName,
+        FileExtension fileExtension = FileExtension.Pdf,
         Guid? bankStatementFileId = null,
         CancellationToken ct = default)
     {
@@ -30,7 +31,8 @@ public class BankStatementService
             UserId = userId,
             OwnerType = userId.HasValue ? OwnerType.AuthenticatedUser : OwnerType.Anonymous,
             OriginalFileName = OriginalFileName,
-            PdfFileKey = pdfFileKey,
+            UploadedFileKey = fileKey,
+            FileExtension = fileExtension,
             CsvFileKey = null,
         };
 

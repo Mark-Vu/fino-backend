@@ -47,6 +47,14 @@ public class ConversionJobService
             .Include(j => j.BankStatementFile)
             .FirstOrDefaultAsync(j => j.Id == jobId, ct);
     }
+    
+    public async Task<List<ConversionJob>> GetJobsByIdsAsync(List<Guid> jobIds, CancellationToken ct = default)
+    {
+        return await _db.ConversionJobs
+            .Include(j => j.BankStatementFile)
+            .Where(j => jobIds.Contains(j.Id))
+            .ToListAsync(ct);
+    }
 
     
     public async Task<bool> UpdateStatusAsync(Guid jobId, JobStatus status, string? errorMessage = null, CancellationToken ct = default)

@@ -26,6 +26,19 @@ public class ApplicationDbContext : DbContext
         UpdateTimestamps();
         return await base.SaveChangesAsync(cancellationToken);
     }
+    
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        base.OnModelCreating(modelBuilder);
+
+        modelBuilder
+            .Entity<BankStatementFile>()
+            .Property(b => b.FileExtension)
+            .HasConversion(
+                v => v.ToString().ToLowerInvariant(),       // enum → string
+                v => (FileExtension)Enum.Parse(typeof(FileExtension), v, true) // string → enum
+            );
+    }
 
     private void UpdateTimestamps()
     {

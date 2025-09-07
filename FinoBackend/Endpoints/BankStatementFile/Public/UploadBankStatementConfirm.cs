@@ -40,7 +40,7 @@ public class UploadBankStatementConfirm : Endpoint<UploadBankStatementConfirmReq
     {
         _logger.LogInformation("Confirming Bank Statement File Upload");
 
-        var key = _storage.GetPublicPdfUploadKey(req.FileId);
+        var key = _storage.GetPublicUploadKey(req.FileId);
         var jobId = Guid.NewGuid();
 
         var validation = await _storage.ValidateFileAsync(key, ct);
@@ -55,7 +55,7 @@ public class UploadBankStatementConfirm : Endpoint<UploadBankStatementConfirmReq
 
         var file = await _bankStatementService.CreateBankStatementFileAsync(
             userId: null,
-            pdfFileKey: key,
+            fileKey: key,
             bankStatementFileId: req.FileId,
             OriginalFileName:  req.FileName,
             ct: ct);

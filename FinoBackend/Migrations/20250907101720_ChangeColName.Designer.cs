@@ -3,6 +3,7 @@ using System;
 using FinoBackend.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace fino_backend.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250907101720_ChangeColName")]
+    partial class ChangeColName
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -37,9 +40,8 @@ namespace fino_backend.Migrations
                         .HasColumnType("text")
                         .HasColumnName("csv_file_key");
 
-                    b.Property<string>("FileExtension")
-                        .IsRequired()
-                        .HasColumnType("text")
+                    b.Property<int>("FileExtension")
+                        .HasColumnType("integer")
                         .HasColumnName("file_extension");
 
                     b.Property<string>("OriginalFileName")

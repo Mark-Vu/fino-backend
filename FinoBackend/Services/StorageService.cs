@@ -1,5 +1,6 @@
 using Amazon.S3;
 using Amazon.S3.Model;
+using FinoBackend.Common;
 using Microsoft.Extensions.Configuration;
 
 namespace FinoBackend.Services;
@@ -23,13 +24,13 @@ public class StorageService
     }
 
     // --- Keys (single bucket; namespacing via prefixes) ---
-    public string GetPrivatePdfUploadKey(Guid userId, Guid fileId)
-        => $"{_basePrivate}/bank_statement_converter/uploads/{userId}/{fileId}.pdf";
+    public string GetPrivateUploadKey(Guid userId, Guid fileId, string extension)
+        => $"{_basePrivate}/bank_statement_converter/uploads/{userId}/{fileId}.{extension}";
 
     public string GetPrivateCsvResultKey(Guid userId, Guid jobId)
         => $"{_basePrivate}/bank_statement_converter/results/{userId}/{jobId}.csv";
 
-    public string GetPublicPdfUploadKey(Guid fileId)
+    public string GetPublicUploadKey(Guid fileId)
         => $"{_basePublic}/bank_statement_converter/uploads/{fileId}.pdf";
 
     public string GetPublicCsvResultKey(Guid jobId)
@@ -117,16 +118,19 @@ public class StorageService
     public async Task<(Guid FileId, string Key, string UploadUrl)> CreatePdfUploadPublicAsync(TimeSpan ttl)
     {
         var fileId = Guid.NewGuid();
-        var key = GetPublicPdfUploadKey(fileId);
+        var key = GetPublicUploadKey(fileId);
         var url = await GetPresignedPutUrlAsync(key, "application/pdf", ttl);
         return (fileId, key, url);
     }
     
-    public async Task<(Guid FileId, string Key, string UploadUrl)> CreatePdfUploadPrivateAsync(Guid userId, TimeSpan ttl)
+    public async Task<(Guid FileId, string Key, string UploadUrl)> CreateUploadPrivateAsync(
+        Guid userId, TimeSpan ttl, string extension, string contentType)
     {
         var fileId = Guid.NewGuid();
-        var key = GetPrivatePdfUploadKey(userId, fileId);
-        var url = await GetPresignedPutUrlAsync(key, "application/pdf", ttl);
+        if (!extension.StartsWith(".")) extension = "." + extension;
+
+        var key = GetPrivateUploadKey(userId, fileId, extension);
+        var url = await GetPresignedPutUrlAsync(key, contentType, ttl);
         return (fileId, key, url);
     }
     
@@ -176,7 +180,9 @@ public class StorageService
     {
         var results = new List<(string Key, long? Size)>();
         bool allValid = true;
-
+        if (keys.Count > 10)
+            throw new BadRequestException("Too many files");
+                
         foreach (var key in keys)
         {
             try

@@ -27,23 +27,24 @@ public class UploadMultipleBankStatement
     public override async Task HandleAsync(UploadMultipleBankStatementRequest req, CancellationToken ct)
     {
         _logger.LogInformation("UploadMultipleBankStatement request started {@Req}", req);
-        if (req.Count > 10)
-        {
-            throw new BadRequestException();
-        }
+
+        if (req.Files.Count == 0 || req.Files.Count > 10)
+            throw new BadRequestException("Must request between 1 and 10 files");
 
         var sub = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (Guid.Parse(sub) != req.UserId)
-        {
             throw new UnauthorizedException();
-        }
-
         var uploads = new List<FileUploadDto>();
 
-        for (int i = 0; i < req.Count; i++)
+        foreach (var spec in req.Files)
         {
-            var (fileId, key, url) = await _storage.CreatePdfUploadPrivateAsync(req.UserId, TimeSpan.FromMinutes(5));
+            var fileExt = FileExtensionHelper.Parse(spec.FileType);
+
+            var (ext, mime) = FileExtensionHelper.ToContentType(fileExt);
+
+            var (fileId, key, url) = await _storage.CreateUploadPrivateAsync(req.UserId, TimeSpan.FromMinutes(5), ext, mime);
             uploads.Add(new FileUploadDto(fileId, key, url));
+
             _logger.LogInformation("Generated presigned URL for {UserId}, key={Key}", req.UserId, key);
         }
 
@@ -51,7 +52,16 @@ public class UploadMultipleBankStatement
     }
 }
 
-public record UploadMultipleBankStatementRequest([Required] Guid UserId, int Count);
+// --- Request/Response Models ---
+
+public record UploadFileSpec(
+    [Required] string FileType // "pdf", "jpeg", "png", "tiff"
+);
+
+public record UploadMultipleBankStatementRequest(
+    [Required] Guid UserId,
+    [Required] List<UploadFileSpec> Files
+);
 
 public record UploadMultipleBankStatementResponse(List<FileUploadDto> Files);
 

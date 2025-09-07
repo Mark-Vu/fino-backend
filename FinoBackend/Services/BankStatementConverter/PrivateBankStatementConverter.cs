@@ -4,37 +4,38 @@ using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 using FinoBackend.Data;
 using FinoBackend.Services.BankStatementConverter;
+using FinoBackend.Models;
 
 namespace FinoBackend.Services.Workers;
 
 /// <summary>
 /// Background worker that consumes SQS messages (conversion jobs),
-/// downloads PDFs from S3, converts them to CSV, uploads results, 
+/// downloads files from S3, converts them to CSV, uploads results, 
 /// and updates the database.
 /// </summary>
-public class PrivateBankStatementConversionWorker : BackgroundService
+public class PrivateBankStatementConverter : BackgroundService
 {
     private readonly IAmazonSQS _sqs;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IConfiguration _config;
     private readonly StorageService _storage;
-    private readonly ILogger<PublicBankStatementConversionWorker> _logger;
-    private readonly PrivateBankStatementConverter _privateBankStatementConverter;
+    private readonly ILogger<PrivateBankStatementConverter> _logger;
+    private readonly BankStatementConverter.PrivateBankStatementConversionWorker _privateBankStatementConversionWorker;
 
-    public PrivateBankStatementConversionWorker(
+    public PrivateBankStatementConverter(
         IAmazonSQS sqs,
         IServiceScopeFactory scopeFactory,
         IConfiguration config,
         StorageService storage,
-        ILogger<PublicBankStatementConversionWorker> logger,
-        PrivateBankStatementConverter privateBankStatementConverter)
+        ILogger<PrivateBankStatementConverter> logger,
+        BankStatementConverter.PrivateBankStatementConversionWorker privateBankStatementConversionWorker)
     {
         _sqs = sqs;
         _scopeFactory = scopeFactory;
         _config = config;
         _storage = storage;
         _logger = logger;
-        _privateBankStatementConverter = privateBankStatementConverter;
+        _privateBankStatementConversionWorker = privateBankStatementConversionWorker;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -42,41 +43,60 @@ public class PrivateBankStatementConversionWorker : BackgroundService
         var queueUrl = _config["SQS:QueueUrl"]
                        ?? throw new InvalidOperationException("Missing SQS:QueueUrl in configuration");
         _logger.LogInformation("PrivateBankStatementConversionWorker started. Listening on {@QueueUrl}", queueUrl);
+
         while (!stoppingToken.IsCancellationRequested)
         {
-            _logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
             var response = await _sqs.ReceiveMessageAsync(new ReceiveMessageRequest
             {
                 QueueUrl = queueUrl,
                 MaxNumberOfMessages = 1,
                 WaitTimeSeconds = 20
             }, stoppingToken);
+
             if (response.Messages is null || response.Messages.Count < 1) continue;
+
             foreach (var msg in response.Messages)
             {
                 try
                 {
                     var jobMessage = JsonSerializer.Deserialize<PrivateConversionJobMessage>(msg.Body);
                     _logger.LogInformation("Job received {@JobMessage}", jobMessage);
-                    
+
                     if (jobMessage is null) continue;
-                    
+
                     using var scope = _scopeFactory.CreateScope();
                     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
                     var job = await db.ConversionJobs
                         .Include(j => j.BankStatementFile)
                         .FirstOrDefaultAsync(j => j.Id == jobMessage.JobId, stoppingToken);
-                    
-                    if (job is null)
-                        continue;
+
+                    if (job is null) continue;
 
                     job.Status = JobStatus.Processing;
                     job.StartedAt = DateTime.UtcNow;
                     await db.SaveChangesAsync(stoppingToken);
 
-                    // Convert to CSV 
-                    var csvStream = await _privateBankStatementConverter.ConvertPdfToCsvAsync(job.BankStatementFile.PdfFileKey, stoppingToken);
+                    // --- Branch by FileExtension ---
+                    Stream csvStream;
+                    switch (job.BankStatementFile.FileExtension)
+                    {
+                        case FileExtension.Pdf:
+                        case FileExtension.Tiff:
+                            csvStream = await _privateBankStatementConversionWorker
+                                .ConvertPdfOrTiffToCsvAsync(job.BankStatementFile.UploadedFileKey, stoppingToken);
+                            break;
+
+                        case FileExtension.Jpg:
+                        case FileExtension.Png:
+                            csvStream = await _privateBankStatementConversionWorker
+                                .ConvertImageToCsvAsync(job.BankStatementFile.UploadedFileKey, stoppingToken);
+                            break;
+
+                        default:
+                            throw new InvalidOperationException(
+                                $"Unsupported file type: {job.BankStatementFile.FileExtension}");
+                    }
 
                     // Upload result to S3
                     var csvKey = _storage.GetPublicCsvResultKey(job.Id);
@@ -94,11 +114,11 @@ public class PrivateBankStatementConversionWorker : BackgroundService
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Worker error: {ex.Message}");
+                    _logger.LogError(ex, "Worker error while processing message");
                 }
             }
         }
     }
-    
 }
+
 public record PrivateConversionJobMessage(Guid JobId, Guid FileId, Guid UserId);
