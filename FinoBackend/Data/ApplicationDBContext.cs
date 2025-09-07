@@ -1,3 +1,4 @@
+using FinoBackend.Commons.Enums;
 using Microsoft.EntityFrameworkCore;
 using FinoBackend.Models;
 
@@ -11,7 +12,7 @@ public class ApplicationDbContext : DbContext
     }
 
     public DbSet<User> Users { get; set; }
-    public DbSet<BankStatementFile> BankStatementFiles { get; set; }
+    public DbSet<UploadedFile> UploadedFiles { get; set; }
     public DbSet<ConversionJob> ConversionJobs { get; set; }
 
     // Override SaveChanges to handle CreatedAt / UpdatedAt
@@ -32,12 +33,27 @@ public class ApplicationDbContext : DbContext
         base.OnModelCreating(modelBuilder);
 
         modelBuilder
-            .Entity<BankStatementFile>()
+            .Entity<UploadedFile>()
             .Property(b => b.FileExtension)
             .HasConversion(
                 v => v.ToString().ToLowerInvariant(),       // enum → string
                 v => (FileExtension)Enum.Parse(typeof(FileExtension), v, true) // string → enum
             );
+        
+        modelBuilder.Entity<UploadedFile>()
+            .Property(f => f.OwnerType)
+            .HasConversion(
+                v => v.ToString().ToLowerInvariant(),   // to DB
+                v => (OwnerType)Enum.Parse(typeof(OwnerType), v, true) // from DB
+            );
+
+        modelBuilder.Entity<UploadedFile>()
+            .Property(f => f.Category)
+            .HasConversion(
+                v => v.ToString().ToLowerInvariant(),   // to DB
+                v => (FileCategory)Enum.Parse(typeof(FileCategory), v, true) // from DB
+            );
+
     }
 
     private void UpdateTimestamps()

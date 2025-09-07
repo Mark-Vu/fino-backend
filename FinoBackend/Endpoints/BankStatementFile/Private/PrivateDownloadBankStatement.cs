@@ -9,13 +9,13 @@ public class PrivateDownloadBankStatementCsv
 {
     private readonly StorageService _storage;
     private readonly ILogger<PublicDownloadBankStatementCsv> _logger;
-    private readonly BankStatementService _bankStatementService;
-
-    public PrivateDownloadBankStatementCsv(StorageService storage,  ILogger<PublicDownloadBankStatementCsv> logger, BankStatementService bankStatementService)
+    private readonly UploadedFileService _uploadedFileService;
+    public PrivateDownloadBankStatementCsv(StorageService storage,  ILogger<PublicDownloadBankStatementCsv> logger, UploadedFileService uploadedFileService)
     {
         _storage = storage;
         _logger = logger;
-        _bankStatementService = bankStatementService;
+        _uploadedFileService = uploadedFileService;
+        
     }
 
     public override void Configure()
@@ -30,7 +30,7 @@ public class PrivateDownloadBankStatementCsv
         var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
 
         // look up file from DB (ensure it belongs to user)
-        var file = await _bankStatementService.GetBankStatementFileByIdAsync(req.FileId, ct);
+        var file = await _uploadedFileService.GetUploadedFileByIdAsync(req.FileId, ct);
         if (file is null)
         {
             throw new NotFoundException("File not found");
@@ -43,11 +43,10 @@ public class PrivateDownloadBankStatementCsv
         // 👇 choose original name if available, else fall back to FileId
         var fileName = Path.ChangeExtension(file.OriginalFileName, ".csv");
 
-        var url = await _storage.GetPresignedGetUrlAsync(
-            file.CsvFileKey,
+        var url = _storage.GetPresignedGetUrl(
+            file.OutputFileKey,
             TimeSpan.FromMinutes(5),
-            fileName: fileName,
-            ct: ct);
+            fileName: fileName);
 
         await Send.OkAsync(new PrivateDownloadBankStatementCsvResponse(url), ct);
     }

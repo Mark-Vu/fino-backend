@@ -1,51 +1,54 @@
+using FinoBackend.Commons.Enums;
 using FinoBackend.Data;
 using FinoBackend.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace FinoBackend.Services;
 
-public class BankStatementService
+public class UploadedFileService
 {
     private readonly ApplicationDbContext _db;
-    private readonly ILogger<BankStatementService> _logger;
+    private readonly ILogger<UploadedFileService> _logger;
     
-    public BankStatementService(ApplicationDbContext db, ILogger<BankStatementService> logger)
+    public UploadedFileService(ApplicationDbContext db, ILogger<UploadedFileService> logger)
     {
         _db = db;
         _logger = logger;
     }
     
-    public async Task<BankStatementFile> CreateBankStatementFileAsync(
+    public async Task<UploadedFile> CreateUploadedFileAsync(
         Guid? userId,
         string fileKey,
-        string OriginalFileName,
-        FileExtension fileExtension = FileExtension.Pdf,
+        string originalFileName,
+        FileCategory fileCategory,
+        FileExtension fileExtension,
         Guid? bankStatementFileId = null,
         CancellationToken ct = default)
     {
         var id = bankStatementFileId ?? Guid.NewGuid();
 
-        var file = new BankStatementFile
+        var file = new UploadedFile
         {
             Id = id,
             UserId = userId,
             OwnerType = userId.HasValue ? OwnerType.AuthenticatedUser : OwnerType.Anonymous,
-            OriginalFileName = OriginalFileName,
+            Category = fileCategory,
+            OriginalFileName = originalFileName,
             UploadedFileKey = fileKey,
             FileExtension = fileExtension,
-            CsvFileKey = null,
+            OutputFileKey = null,
         };
 
-        _db.BankStatementFiles.Add(file);
+        _db.UploadedFiles.Add(file);
         await _db.SaveChangesAsync(ct);
         return file;
     }
 
     
 
-    public async Task<BankStatementFile?> GetBankStatementFileByIdAsync(Guid id, CancellationToken ct = default)
+    public async Task<UploadedFile?> GetUploadedFileByIdAsync(Guid id, CancellationToken ct = default)
     {
-        return await _db.BankStatementFiles
+        return await _db.UploadedFiles
             .FirstOrDefaultAsync(f => f.Id == id, ct);
     }
 }

@@ -52,12 +52,12 @@ builder.Services.AddAuthorization();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddSingleton<StorageService>();
 builder.Services.AddScoped<ConversionJobService>();
-builder.Services.AddScoped<BankStatementService>();
+builder.Services.AddScoped<UploadedFileService>();
 builder.Services.AddScoped<MessageQueueService>();
-builder.Services.AddSingleton<PublicBankStatementConversionWorker>();
-builder.Services.AddHostedService<PublicBankStatementConverter>();
-builder.Services.AddSingleton<PrivateBankStatementConversionWorker>();
-builder.Services.AddHostedService<PrivateBankStatementConverter>();
+builder.Services.AddSingleton<PublicBankStatementConverter>();
+builder.Services.AddHostedService<PublicBankStatementBackgroundWorker>();
+builder.Services.AddSingleton<PrivateBankStatementConverter>();
+builder.Services.AddHostedService<PrivateBankStatementBackgroundWorker>();
 
 var app = builder.Build();
 

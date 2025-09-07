@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using FastEndpoints;
 using FinoBackend.Common;
+using FinoBackend.Commons.Enums;
 using FinoBackend.Services;
 using FinoBackend.Models;
 
@@ -11,7 +12,7 @@ public class UploadMultipleBankStatementsConfirm
     : Endpoint<UploadMultipleBankStatementsConfirmRequest, UploadMultipleBankStatementsConfirmResponse>
 {
     private readonly StorageService _storage;
-    private readonly BankStatementService _bankStatementService;
+    private readonly UploadedFileService _uploadedFileService;
     private readonly ConversionJobService _conversionJobService;
     private readonly MessageQueueService _messageQueueService;
     private readonly ILogger<UploadMultipleBankStatementsConfirm> _logger;
@@ -19,13 +20,13 @@ public class UploadMultipleBankStatementsConfirm
     public UploadMultipleBankStatementsConfirm(
         ConversionJobService conversionJobService, 
         StorageService storage, 
-        BankStatementService bankStatementService,
+        UploadedFileService uploadedFileService,
         MessageQueueService messageQueueService,
         ILogger<UploadMultipleBankStatementsConfirm> logger)
     {
         _conversionJobService = conversionJobService;
         _storage = storage;
-        _bankStatementService = bankStatementService;
+        _uploadedFileService = uploadedFileService;
         _messageQueueService = messageQueueService;
         _logger = logger;
     }
@@ -63,16 +64,16 @@ public class UploadMultipleBankStatementsConfirm
             var fileExt = FileExtensionHelper.Parse(spec.FileExtension);
 
             // Insert/confirm BankStatementFile row
-            var file = await _bankStatementService.CreateBankStatementFileAsync(
+            var file = await _uploadedFileService.CreateUploadedFileAsync(
                 userId: req.UserId,
                 fileKey: spec.FileKey,
+                fileCategory: FileCategory.Bank_Statement,
                 fileExtension: fileExt,
                 ct: ct,
-                OriginalFileName: spec.FileName,
+                originalFileName: spec.FileName,
                 bankStatementFileId: spec.FileId);
 
             var jobId = Guid.NewGuid();
-            var csvKey = _storage.GetPrivateCsvResultKey(req.UserId, jobId);
 
             var message = new ConversionJobMessage(jobId, file.Id, file.UserId);
 

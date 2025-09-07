@@ -2,6 +2,8 @@ using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using FastEndpoints;
 using FinoBackend.Common;
+using FinoBackend.Commons.Enums;
+using FinoBackend.Models;
 using FinoBackend.Services;
 
 namespace FinoBackend.Endpoints.BankStatementFile;
@@ -10,7 +12,7 @@ namespace FinoBackend.Endpoints.BankStatementFile;
 public class UploadBankStatementConfirm : Endpoint<UploadBankStatementConfirmRequest, UploadBankStatementConfirmResponse>
 {
     private readonly StorageService _storage;
-    private readonly BankStatementService _bankStatementService;
+    private readonly UploadedFileService _uploadedFileService;
     private readonly ConversionJobService _conversionJobService;
     private readonly MessageQueueService _messageQueueService;
     private readonly ILogger<UploadBankStatementConfirm> _logger;
@@ -18,13 +20,13 @@ public class UploadBankStatementConfirm : Endpoint<UploadBankStatementConfirmReq
     public UploadBankStatementConfirm(
         ConversionJobService conversionJobService, 
         StorageService storage, 
-        BankStatementService bankStatementService,
+        UploadedFileService uploadedFileService,
         MessageQueueService messageQueueService,
         ILogger<UploadBankStatementConfirm> logger)
     {
         _conversionJobService = conversionJobService;
         _storage = storage;
-        _bankStatementService = bankStatementService;
+        _uploadedFileService = uploadedFileService;
         _messageQueueService = messageQueueService;
         _logger = logger;
     }
@@ -40,24 +42,26 @@ public class UploadBankStatementConfirm : Endpoint<UploadBankStatementConfirmReq
     {
         _logger.LogInformation("Confirming Bank Statement File Upload");
 
-        var key = _storage.GetPublicUploadKey(req.FileId);
+        var key = StorageKeyBuilder.GetPublicUploadKey(req.FileId, FileCategory.Bank_Statement, FileExtension.Pdf);
         var jobId = Guid.NewGuid();
 
         var validation = await _storage.ValidateFileAsync(key, ct);
         if (!validation.Exists)
             throw new BadRequestException("File not found in storage.");
 
-        if (!validation.ValidFileSize)
-            throw new BadRequestException($"File exceeds max size of 50MB. Actual size: {validation.size / (1024*1024)} MB");
+        if (!validation.ValidSize)
+            throw new BadRequestException($"File exceeds max size of 50MB. Actual size: {validation.Size / (1024*1024)} MB");
 
         var messageToMessageQueue = new ConversionJobMessage( 
             JobId: jobId, FileId: req.FileId, UserId:null);
 
-        var file = await _bankStatementService.CreateBankStatementFileAsync(
+        var file = await _uploadedFileService.CreateUploadedFileAsync(
             userId: null,
             fileKey: key,
+            fileCategory: FileCategory.Bank_Statement,
+            fileExtension: FileExtension.Pdf,
             bankStatementFileId: req.FileId,
-            OriginalFileName:  req.FileName,
+            originalFileName:  req.FileName,
             ct: ct);
 
         var job = await _conversionJobService.CreateAsync(
@@ -65,7 +69,6 @@ public class UploadBankStatementConfirm : Endpoint<UploadBankStatementConfirmReq
             jobId: jobId,
             ct
         );
-        var csvKey = _storage.GetPublicCsvResultKey(job.Id);
         
         
         var response = new UploadBankStatementConfirmResponse(

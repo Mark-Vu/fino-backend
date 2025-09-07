@@ -2,6 +2,8 @@ using System.ComponentModel.DataAnnotations;
 using System.Security.Claims;
 using FastEndpoints;
 using FinoBackend.Common;
+using FinoBackend.Commons.Enums;
+using FinoBackend.Models;
 using FinoBackend.Services;
 
 namespace FinoBackend.Endpoints.BankStatementFile;
@@ -40,9 +42,11 @@ public class UploadMultipleBankStatement
         {
             var fileExt = FileExtensionHelper.Parse(spec.FileType);
 
-            var (ext, mime) = FileExtensionHelper.ToContentType(fileExt);
+            var (_, mime) = FileExtensionHelper.ToContentType(fileExt);
 
-            var (fileId, key, url) = await _storage.CreateUploadPrivateAsync(req.UserId, TimeSpan.FromMinutes(5), ext, mime);
+            var fileId = Guid.NewGuid();
+            var key = StorageKeyBuilder.GetPrivateUploadKey(req.UserId, fileId, FileCategory.Bank_Statement, FileExtension.Pdf);
+            var url = _storage.GetPresignedPutUrl(key, mime, TimeSpan.FromMinutes(5));
             uploads.Add(new FileUploadDto(fileId, key, url));
 
             _logger.LogInformation("Generated presigned URL for {UserId}, key={Key}", req.UserId, key);

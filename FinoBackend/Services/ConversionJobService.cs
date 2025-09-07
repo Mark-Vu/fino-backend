@@ -26,7 +26,7 @@ public class ConversionJobService
         var job = new ConversionJob
         {
             Id = jobId,
-            BankStatementFileId = bankStatementFileId,
+            UploadedFileId = bankStatementFileId,
             Status = JobStatus.Pending,
             ErrorMessage = null,
             StartedAt = DateTime.UtcNow,
@@ -44,14 +44,14 @@ public class ConversionJobService
     {
         _logger.LogInformation("Getting conversion job {JobId}", jobId);
         return await _db.ConversionJobs
-            .Include(j => j.BankStatementFile)
+            .Include(j => j.UploadedFile)
             .FirstOrDefaultAsync(j => j.Id == jobId, ct);
     }
     
     public async Task<List<ConversionJob>> GetJobsByIdsAsync(List<Guid> jobIds, CancellationToken ct = default)
     {
         return await _db.ConversionJobs
-            .Include(j => j.BankStatementFile)
+            .Include(j => j.UploadedFile)
             .Where(j => jobIds.Contains(j.Id))
             .ToListAsync(ct);
     }

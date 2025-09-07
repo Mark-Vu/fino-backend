@@ -1,5 +1,9 @@
+using System.Runtime.Serialization;
+
 public enum OwnerType
 {
-    AuthenticatedUser = 0,
-    Anonymous = 1
+    [EnumMember(Value = "auth_user")]
+    AuthenticatedUser,
+    [EnumMember(Value = "anonymous")]
+    Anonymous
 }

@@ -11,11 +11,11 @@ public class ConversionJob : BaseModel
 
     public string? ErrorMessage { get; set; }
 
-    [ForeignKey(nameof(BankStatementFile))]
-    public Guid BankStatementFileId { get; set; }
+    [ForeignKey(nameof(UploadedFile))]
+    public Guid UploadedFileId { get; set; }
 
     [JsonIgnore]
-    public BankStatementFile BankStatementFile { get; set; } = null!;
+    public UploadedFile UploadedFile { get; set; } = null!;
 
     // Set these in code (worker/service), not with property initializers.
     public DateTime? StartedAt { get; set; }

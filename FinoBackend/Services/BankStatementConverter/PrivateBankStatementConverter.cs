@@ -1,124 +1,86 @@
-using Amazon.SQS;
-using Amazon.SQS.Model;
-using Microsoft.EntityFrameworkCore;
-using System.Text.Json;
-using FinoBackend.Data;
-using FinoBackend.Services.BankStatementConverter;
-using FinoBackend.Models;
+using Amazon.Textract;
+using Amazon.Textract.Model;
 
-namespace FinoBackend.Services.Workers;
+namespace FinoBackend.Services.BankStatementConverter;
 
-/// <summary>
-/// Background worker that consumes SQS messages (conversion jobs),
-/// downloads files from S3, converts them to CSV, uploads results, 
-/// and updates the database.
-/// </summary>
-public class PrivateBankStatementConverter : BackgroundService
+public class PrivateBankStatementConverter
 {
-    private readonly IAmazonSQS _sqs;
-    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IAmazonTextract _textract;
     private readonly IConfiguration _config;
-    private readonly StorageService _storage;
     private readonly ILogger<PrivateBankStatementConverter> _logger;
-    private readonly BankStatementConverter.PrivateBankStatementConversionWorker _privateBankStatementConversionWorker;
 
     public PrivateBankStatementConverter(
-        IAmazonSQS sqs,
-        IServiceScopeFactory scopeFactory,
+        IAmazonTextract textract,
         IConfiguration config,
-        StorageService storage,
-        ILogger<PrivateBankStatementConverter> logger,
-        BankStatementConverter.PrivateBankStatementConversionWorker privateBankStatementConversionWorker)
+        ILogger<PrivateBankStatementConverter> logger)
     {
-        _sqs = sqs;
-        _scopeFactory = scopeFactory;
+        _textract = textract;
         _config = config;
-        _storage = storage;
         _logger = logger;
-        _privateBankStatementConversionWorker = privateBankStatementConversionWorker;
     }
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    // PDFs & TIFFs (async Textract)
+    public async Task<Stream> ConvertPdfOrTiffToCsvAsync(string s3Key, CancellationToken ct)
     {
-        var queueUrl = _config["SQS:QueueUrl"]
-                       ?? throw new InvalidOperationException("Missing SQS:QueueUrl in configuration");
-        _logger.LogInformation("PrivateBankStatementConversionWorker started. Listening on {@QueueUrl}", queueUrl);
+        var bucket = _config["S3:Bucket"]
+                     ?? throw new InvalidOperationException("Missing S3:Bucket in config");
 
-        while (!stoppingToken.IsCancellationRequested)
+        _logger.LogInformation("Starting Textract StartDocumentAnalysis for {Bucket}/{Key}", bucket, s3Key);
+
+        var startReq = new StartDocumentAnalysisRequest
         {
-            var response = await _sqs.ReceiveMessageAsync(new ReceiveMessageRequest
+            DocumentLocation = new DocumentLocation
             {
-                QueueUrl = queueUrl,
-                MaxNumberOfMessages = 1,
-                WaitTimeSeconds = 20
-            }, stoppingToken);
+                S3Object = new Amazon.Textract.Model.S3Object { Bucket = bucket, Name = s3Key }
+            },
+            FeatureTypes = new List<string> { "TABLES" }
+        };
 
-            if (response.Messages is null || response.Messages.Count < 1) continue;
+        var startResp = await _textract.StartDocumentAnalysisAsync(startReq, ct);
+        var jobId = startResp.JobId!;
 
-            foreach (var msg in response.Messages)
+        GetDocumentAnalysisResponse resp;
+        do
+        {
+            await Task.Delay(TimeSpan.FromSeconds(2), ct);
+            resp = await _textract.GetDocumentAnalysisAsync(new GetDocumentAnalysisRequest { JobId = jobId }, ct);
+        } while (resp.JobStatus == Amazon.Textract.JobStatus.IN_PROGRESS);
+
+        if (resp.JobStatus != Amazon.Textract.JobStatus.SUCCEEDED)
+            throw new Exception($"Textract failed: {resp.JobStatus}");
+
+        var allBlocks = new List<Block>(resp.Blocks);
+        while (!string.IsNullOrEmpty(resp.NextToken))
+        {
+            resp = await _textract.GetDocumentAnalysisAsync(new GetDocumentAnalysisRequest
             {
-                try
-                {
-                    var jobMessage = JsonSerializer.Deserialize<PrivateConversionJobMessage>(msg.Body);
-                    _logger.LogInformation("Job received {@JobMessage}", jobMessage);
-
-                    if (jobMessage is null) continue;
-
-                    using var scope = _scopeFactory.CreateScope();
-                    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-
-                    var job = await db.ConversionJobs
-                        .Include(j => j.BankStatementFile)
-                        .FirstOrDefaultAsync(j => j.Id == jobMessage.JobId, stoppingToken);
-
-                    if (job is null) continue;
-
-                    job.Status = JobStatus.Processing;
-                    job.StartedAt = DateTime.UtcNow;
-                    await db.SaveChangesAsync(stoppingToken);
-
-                    // --- Branch by FileExtension ---
-                    Stream csvStream;
-                    switch (job.BankStatementFile.FileExtension)
-                    {
-                        case FileExtension.Pdf:
-                        case FileExtension.Tiff:
-                            csvStream = await _privateBankStatementConversionWorker
-                                .ConvertPdfOrTiffToCsvAsync(job.BankStatementFile.UploadedFileKey, stoppingToken);
-                            break;
-
-                        case FileExtension.Jpg:
-                        case FileExtension.Png:
-                            csvStream = await _privateBankStatementConversionWorker
-                                .ConvertImageToCsvAsync(job.BankStatementFile.UploadedFileKey, stoppingToken);
-                            break;
-
-                        default:
-                            throw new InvalidOperationException(
-                                $"Unsupported file type: {job.BankStatementFile.FileExtension}");
-                    }
-
-                    // Upload result to S3
-                    var csvKey = _storage.GetPublicCsvResultKey(job.Id);
-                    await _storage.UploadAsync(csvKey, csvStream, "text/csv", stoppingToken);
-
-                    // Update DB
-                    job.Status = JobStatus.Success;
-                    job.FinishedAt = DateTime.UtcNow;
-                    job.BankStatementFile.CsvFileKey = csvKey;
-                    await db.SaveChangesAsync(stoppingToken);
-
-                    // Remove message from queue
-                    await _sqs.DeleteMessageAsync(queueUrl, msg.ReceiptHandle, stoppingToken);
-                    _logger.LogInformation("Job {@JobMessage} was successfully processed", jobMessage);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Worker error while processing message");
-                }
-            }
+                JobId = jobId,
+                NextToken = resp.NextToken
+            }, ct);
+            allBlocks.AddRange(resp.Blocks);
         }
+
+        return BankStatementCsvHelper.BuildCsvFromBlocks(allBlocks);
+    }
+
+    // JPG / PNG (sync Textract)
+    public async Task<Stream> ConvertImageToCsvAsync(string s3Key, CancellationToken ct)
+    {
+        var bucket = _config["S3:Bucket"]
+                     ?? throw new InvalidOperationException("Missing S3:Bucket in config");
+
+        _logger.LogInformation("Starting Textract AnalyzeDocument for {Bucket}/{Key}", bucket, s3Key);
+
+        var req = new AnalyzeDocumentRequest
+        {
+            Document = new Document
+            {
+                S3Object = new Amazon.Textract.Model.S3Object { Bucket = bucket, Name = s3Key }
+            },
+            FeatureTypes = new List<string> { "TABLES" }
+        };
+
+        var resp = await _textract.AnalyzeDocumentAsync(req, ct);
+        return BankStatementCsvHelper.BuildCsvFromBlocks(resp.Blocks);
     }
 }
-
-public record PrivateConversionJobMessage(Guid JobId, Guid FileId, Guid UserId);
