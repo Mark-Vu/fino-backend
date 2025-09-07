@@ -11,8 +11,6 @@ using FinoBackend.Services;
 using FinoBackend.Services.BankStatementConverter;
 using FinoBackend.Services.Workers;
 using Microsoft.EntityFrameworkCore;
-using PrivateBankStatementConverter = FinoBackend.Services.Workers.PrivateBankStatementConverter;
-using PublicBankStatementConverter = FinoBackend.Services.Workers.PublicBankStatementConverter;
 
 var builder = WebApplication.CreateBuilder(args);
 var awsOptions = builder.Configuration.GetSection("AWS").Get<AwsConfig>();
@@ -56,9 +54,9 @@ builder.Services.AddSingleton<StorageService>();
 builder.Services.AddScoped<ConversionJobService>();
 builder.Services.AddScoped<BankStatementService>();
 builder.Services.AddScoped<MessageQueueService>();
-builder.Services.AddSingleton<FinoBackend.Services.BankStatementConverter.PublicBankStatementConversionWorker>();
+builder.Services.AddSingleton<PublicBankStatementConversionWorker>();
 builder.Services.AddHostedService<PublicBankStatementConverter>();
-builder.Services.AddSingleton<FinoBackend.Services.BankStatementConverter.PrivateBankStatementConversionWorker>();
+builder.Services.AddSingleton<PrivateBankStatementConversionWorker>();
 builder.Services.AddHostedService<PrivateBankStatementConverter>();
 
 var app = builder.Build();
