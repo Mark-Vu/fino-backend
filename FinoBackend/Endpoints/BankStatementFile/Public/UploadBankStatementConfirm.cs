@@ -75,9 +75,9 @@ public class UploadBankStatementConfirm : Endpoint<UploadBankStatementConfirmReq
             Job: job
         );
         
-        var queueUrl = await _messageQueueService.EnqueueJobAsync(
+        var queueUrl = await _messageQueueService.EnqueueAsync(
+            queueType: QueueType.PublicBankStatementConversion,
             messageToMessageQueue,
-            isPublic: true,
             ct
         );
         _logger.LogInformation("Enqueued {@message} in {@QueueUrl}", messageToMessageQueue, queueUrl);

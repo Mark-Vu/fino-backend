@@ -4,8 +4,9 @@ using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 using FinoBackend.Commons.Enums;
 using FinoBackend.Data;
+using FinoBackend.Services.BankStatementConverter;
 
-namespace FinoBackend.Services.Workers;
+namespace FinoBackend.Services.Workers.BankStatementWorkers;
 
 
 public class PublicBankStatementBackgroundWorker : BackgroundService
@@ -15,7 +16,7 @@ public class PublicBankStatementBackgroundWorker : BackgroundService
     private readonly IConfiguration _config;
     private readonly StorageService _storage;
     private readonly ILogger<PublicBankStatementBackgroundWorker> _logger;
-    private readonly BankStatementConverter.PublicBankStatementConverter _publicBankStatementConverter;
+    private readonly PublicBankStatementConverter _publicBankStatementConverter;
 
     public PublicBankStatementBackgroundWorker(
         IAmazonSQS sqs,
@@ -23,7 +24,7 @@ public class PublicBankStatementBackgroundWorker : BackgroundService
         IConfiguration config,
         StorageService storage,
         ILogger<PublicBankStatementBackgroundWorker> logger,
-        BankStatementConverter.PublicBankStatementConverter publicBankStatementConverter)
+        PublicBankStatementConverter publicBankStatementConverter)
     {
         _sqs = sqs;
         _scopeFactory = scopeFactory;
@@ -35,7 +36,7 @@ public class PublicBankStatementBackgroundWorker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var queueUrl = _config["SQS:PublicQueueUrl"]
+        var queueUrl = _config["SQS:PublicBankStatementConversionQueueUrl"]
                        ?? throw new InvalidOperationException("Missing SQS:QueueUrl in configuration");
         _logger.LogInformation("PublicBankStatementConversionWorker started. Listening on {QueueUrl}", queueUrl);
 

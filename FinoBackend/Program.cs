@@ -9,7 +9,9 @@ using FinoBackend.Common.Extensions;
 using FinoBackend.Data;
 using FinoBackend.Services;
 using FinoBackend.Services.BankStatementConverter;
+using FinoBackend.Services.DeliveryReceiptConverter.PrivateDeliveryReceiptConverter;
 using FinoBackend.Services.Workers;
+using FinoBackend.Services.Workers.BankStatementWorkers;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -58,6 +60,8 @@ builder.Services.AddSingleton<PublicBankStatementConverter>();
 builder.Services.AddHostedService<PublicBankStatementBackgroundWorker>();
 builder.Services.AddSingleton<PrivateBankStatementConverter>();
 builder.Services.AddHostedService<PrivateBankStatementBackgroundWorker>();
+builder.Services.AddSingleton<PrivateDeliveryReceiptConverter>();
+builder.Services.AddHostedService<PrivateDeliveryReceiptBackgroundWorker>();
 
 var app = builder.Build();
 

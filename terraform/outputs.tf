@@ -2,20 +2,28 @@ output "s3_bucket_name" {
   value = aws_s3_bucket.bank_statement_converter.bucket
 }
 
-output "sqs_queue_url" {
+output "bank_statement_sqs_queue_url" {
   value = aws_sqs_queue.conversion_jobs.id
 }
 
-output "sqs_queue_arn" {
+output "bank_statement_sqs_queue_arn" {
   value = aws_sqs_queue.conversion_jobs.arn
 }
 
-output "public_sqs_queue_url" {
+output "public_bank_statement_sqs_queue_url" {
   value = aws_sqs_queue.public_conversion_jobs.id
 }
 
-output "public_sqs_queue_arn" {
+output "public_bank_statement_sqs_queue_arn" {
   value = aws_sqs_queue.public_conversion_jobs.arn
+}
+
+output "delivery_receipt_sqs_queue_url" {
+  value = aws_sqs_queue.delivery_receipt_conversion_jobs.id
+}
+
+output "delivery_receipt_sqs_queue_arn" {
+  value = aws_sqs_queue.delivery_receipt_conversion_jobs.arn
 }
 
 output "textract_policy_arn" {
