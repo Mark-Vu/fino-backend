@@ -32,7 +32,7 @@ public class UploadBankStatement
         
         var fileId = Guid.NewGuid();
         var (_, mime) = FileExtensionHelper.ToContentType(FileExtension.Pdf);
-        var key = StorageKeyBuilder.GetPublicUploadKey(fileId, FileCategory.Bank_Statement, FileExtension.Pdf);
+        var key = StorageKeyBuilder.GetPublicUploadKey(fileId, FileCategory.BankStatement, FileExtension.Pdf);
         var url = _storage.GetPresignedPutUrl(key, mime, TimeSpan.FromMinutes(5));
         
         await Send.OkAsync(new UploadBankStatementResponse(

@@ -14,5 +14,8 @@ public enum FileExtension
     Png,
 
     [EnumMember(Value = "tiff")]
-    Tiff
+    Tiff,
+    
+    [EnumMember(Value = "xlsx")]
+    Xlsx
 }

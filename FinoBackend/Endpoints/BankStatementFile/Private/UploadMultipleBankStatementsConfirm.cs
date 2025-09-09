@@ -67,7 +67,7 @@ public class UploadMultipleBankStatementsConfirm
             var file = await _uploadedFileService.CreateUploadedFileAsync(
                 userId: req.UserId,
                 fileKey: spec.FileKey,
-                fileCategory: FileCategory.Bank_Statement,
+                fileCategory: FileCategory.BankStatement,
                 fileExtension: fileExt,
                 ct: ct,
                 originalFileName: spec.FileName,

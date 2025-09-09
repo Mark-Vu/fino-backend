@@ -45,7 +45,7 @@ public class UploadMultipleBankStatement
             var (_, mime) = FileExtensionHelper.ToContentType(fileExt);
 
             var fileId = Guid.NewGuid();
-            var key = StorageKeyBuilder.GetPrivateUploadKey(req.UserId, fileId, FileCategory.Bank_Statement, FileExtension.Pdf);
+            var key = StorageKeyBuilder.GetPrivateUploadKey(req.UserId, fileId, FileCategory.BankStatement, FileExtension.Pdf);
             var url = _storage.GetPresignedPutUrl(key, mime, TimeSpan.FromMinutes(5));
             uploads.Add(new FileUploadDto(fileId, key, url));
 

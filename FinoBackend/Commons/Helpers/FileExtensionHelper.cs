@@ -13,6 +13,7 @@ public static class FileExtensionHelper
             "png"  => FileExtension.Png,
             "tiff" => FileExtension.Tiff,
             "tif"  => FileExtension.Tiff,
+            "xlsx" => FileExtension.Xlsx,
             _ => throw new BadRequestException($"Unsupported file extension: {extString}")
         };
     }
@@ -24,6 +25,7 @@ public static class FileExtensionHelper
             FileExtension.Jpg  => (".jpg", "image/jpeg"),
             FileExtension.Png  => (".png", "image/png"),
             FileExtension.Tiff => (".tiff", "image/tiff"),
+            FileExtension.Xlsx => (".xlsx", "application/vnd.ms-excel"),
             _ => throw new BadRequestException($"Unsupported file extension: {fileExt}")
         };
 }

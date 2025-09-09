@@ -16,7 +16,10 @@ public class PrivateDeliveryReceiptBackgroundWorker : BackgroundService
     private readonly IConfiguration _config;
     private readonly StorageService _storage;
     private readonly ILogger<PrivateDeliveryReceiptBackgroundWorker> _logger;
-    private readonly PrivateDeliveryReceiptConverter _converter; 
+    private readonly PrivateDeliveryReceiptConverter _converter;
+
+    // limit concurrency (max 5 parallel jobs)
+    private readonly SemaphoreSlim _semaphore = new(initialCount: 5);
 
     public PrivateDeliveryReceiptBackgroundWorker(
         IAmazonSQS sqs,
@@ -46,74 +49,79 @@ public class PrivateDeliveryReceiptBackgroundWorker : BackgroundService
             var response = await _sqs.ReceiveMessageAsync(new ReceiveMessageRequest
             {
                 QueueUrl = queueUrl,
-                MaxNumberOfMessages = 10,
+                MaxNumberOfMessages = 5,
                 WaitTimeSeconds = 20
             }, stoppingToken);
 
             if (response.Messages is null || response.Messages.Count == 0)
                 continue;
 
-            foreach (var msg in response.Messages)
+            // process messages concurrently
+            var tasks = response.Messages.Select(msg => ProcessMessageAsync(msg, queueUrl, stoppingToken));
+            await Task.WhenAll(tasks);
+        }
+    }
+
+    private async Task ProcessMessageAsync(Message msg, string queueUrl, CancellationToken ct)
+    {
+        await _semaphore.WaitAsync(ct);
+        try
+        {
+            var jobMessage = JsonSerializer.Deserialize<PrivateConversionJobMessage>(msg.Body);
+            _logger.LogInformation("Delivery receipt job received {@JobMessage}", jobMessage);
+
+            if (jobMessage is null) return;
+
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+            var job = await db.ConversionJobs
+                .Include(j => j.UploadedFile)
+                .FirstOrDefaultAsync(j => j.Id == jobMessage.JobId, ct);
+
+            if (job is null) return;
+
+            job.Status = JobStatus.Processing;
+            job.StartedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync(ct);
+
+            // --- Branch by FileExtension ---
+            Stream csvStream = job.UploadedFile.FileExtension switch
             {
-                try
-                {
-                    var jobMessage = JsonSerializer.Deserialize<PrivateConversionJobMessage>(msg.Body);
-                    _logger.LogInformation("Delivery receipt job received {@JobMessage}", jobMessage);
+                FileExtension.Jpg or FileExtension.Png =>
+                    await _converter.ConvertImageToCsvAsync(job.UploadedFile.UploadedFileKey, ct),
+                _ => throw new InvalidOperationException($"Unsupported file type: {job.UploadedFile.FileExtension}")
+            };
 
-                    if (jobMessage is null) continue;
+            // Upload result to S3
+            var csvKey = StorageKeyBuilder.GetPrivateResultKey(
+                jobMessage.UserId,
+                jobMessage.JobId,
+                FileCategory.DeliveryReceipt);
 
-                    using var scope = _scopeFactory.CreateScope();
-                    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            await _storage.UploadAsync(csvKey, csvStream, "text/csv", ct);
 
-                    var job = await db.ConversionJobs
-                        .Include(j => j.UploadedFile)
-                        .FirstOrDefaultAsync(j => j.Id == jobMessage.JobId, stoppingToken);
+            // Update DB
+            job.Status = JobStatus.Success;
+            job.FinishedAt = DateTime.UtcNow;
+            job.UploadedFile.OutputFileKey = csvKey;
+            await db.SaveChangesAsync(ct);
 
-                    if (job is null) continue;
+            // Remove message from queue
+            await _sqs.DeleteMessageAsync(queueUrl, msg.ReceiptHandle, ct);
 
-                    job.Status = JobStatus.Processing;
-                    job.StartedAt = DateTime.UtcNow;
-                    await db.SaveChangesAsync(stoppingToken);
-
-                    // --- Branch by FileExtension ---
-                    Stream csvStream;
-                    switch (job.UploadedFile.FileExtension)
-                    {
-                        case FileExtension.Jpg:
-                        case FileExtension.Png:
-                            csvStream = await _converter.ConvertImageToCsvAsync(job.UploadedFile.UploadedFileKey, stoppingToken);
-                            break;
-
-                        default:
-                            throw new InvalidOperationException($"Unsupported file type: {job.UploadedFile.FileExtension}");
-                    }
-
-                    // Upload result to S3 (Delivery Receipt namespace)
-                    var csvKey = StorageKeyBuilder.GetPrivateResultKey(
-                        jobMessage.UserId,
-                        jobMessage.JobId,
-                        FileCategory.Delivery_Receipt);
-
-                    await _storage.UploadAsync(csvKey, csvStream, "text/csv", stoppingToken);
-
-                    // Update DB
-                    job.Status = JobStatus.Success;
-                    job.FinishedAt = DateTime.UtcNow;
-                    job.UploadedFile.OutputFileKey = csvKey;
-                    await db.SaveChangesAsync(stoppingToken);
-
-                    // Remove message from queue
-                    await _sqs.DeleteMessageAsync(queueUrl, msg.ReceiptHandle, stoppingToken);
-
-                    _logger.LogInformation("Delivery receipt job {@JobMessage} processed successfully", jobMessage);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error while processing delivery receipt message");
-                }
-            }
+            _logger.LogInformation("Delivery receipt job {@JobMessage} processed successfully", jobMessage);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error while processing delivery receipt message");
+            // ⚠️ Consider DLQ handling here
+        }
+        finally
+        {
+            _semaphore.Release();
         }
     }
 }
-public record PrivateConversionJobMessage(Guid JobId, Guid FileId, Guid UserId);
 
+public record PrivateConversionJobMessage(Guid JobId, Guid FileId, Guid UserId);

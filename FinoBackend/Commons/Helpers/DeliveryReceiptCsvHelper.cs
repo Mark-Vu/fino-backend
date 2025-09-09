@@ -1,12 +1,26 @@
 using Amazon.Textract.Model;
+using Amazon.Textract;
 using System.Text;
 using System.Text.RegularExpressions;
-using Amazon.Textract;
+using System.Globalization;
 
 namespace FinoBackend.Services.ReceiptConverter;
 
 public static class ReceiptCsvHelper
 {
+    // --- Keyword sets ---
+    private static readonly HashSet<string> EnglishKeywords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "receipt", "invoice", "bill",
+        "date", "amount", "total", "price"
+    };
+
+    private static readonly HashSet<string> VietnameseKeywords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "nguoi gui", "nguoi nhan", "dia chi", "so dien thoai", "ma van don",
+        "tien thu ho", "tong cong", "thanh tien", "don gia", "so luong", "stt"
+    };
+
     public static Stream BuildCsvFromBlocks(IReadOnlyList<Block> allBlocks)
     {
         var blockMap = allBlocks.ToDictionary(b => b.Id!, b => b);
@@ -14,7 +28,6 @@ public static class ReceiptCsvHelper
 
         var sb = new StringBuilder();
         bool foundFirstHeader = false;
-        string? headerKey = null;
 
         foreach (var table in tables)
         {
@@ -29,7 +42,9 @@ public static class ReceiptCsvHelper
             var allRows = cells
                 .GroupBy(c => c.RowIndex)
                 .OrderBy(g => g.Key)
-                .Select(g => g.OrderBy(c => c.ColumnIndex).Select(c => GetCellText(c, blockMap)).ToList())
+                .Select(g => g.OrderBy(c => c.ColumnIndex)
+                              .Select(c => GetCellText(c, blockMap))
+                              .ToList())
                 .ToList();
 
             if (allRows.Count == 0) continue;
@@ -41,10 +56,7 @@ public static class ReceiptCsvHelper
                 if (headerIndex < 0) continue; // skip until we find a valid header
 
                 foundFirstHeader = true;
-                var filteredRows = allRows.Skip(headerIndex).ToList();
-                headerKey = RowKey(filteredRows.First());
-
-                foreach (var row in filteredRows)
+                foreach (var row in allRows.Skip(headerIndex))
                 {
                     if (row.All(string.IsNullOrWhiteSpace)) continue;
                     sb.AppendLine(string.Join(",", row.Select(CsvEscape)));
@@ -54,7 +66,7 @@ public static class ReceiptCsvHelper
             {
                 foreach (var row in allRows)
                 {
-                    var rowKey = RowKey(row);
+                    if (row.All(string.IsNullOrWhiteSpace)) continue;
                     sb.AppendLine(string.Join(",", row.Select(CsvEscape)));
                 }
             }
@@ -63,26 +75,13 @@ public static class ReceiptCsvHelper
         return new MemoryStream(Encoding.UTF8.GetBytes(sb.ToString()));
     }
 
-    // 🔑 Header detection (English + Vietnamese keywords)
+    // 🔑 Header detection
     private static bool LooksLikeHeader(IReadOnlyList<string> row)
     {
-        var j = string.Join(' ', row).ToLowerInvariant();
+        var normalized = Normalize(string.Join(' ', row));
 
-        // --- Common receipt headers in English ---
-        bool hasReceipt = j.Contains("receipt") || j.Contains("invoice") || j.Contains("bill");
-        bool hasDate = j.Contains("date");
-        bool hasAmount = j.Contains("amount") || j.Contains("total") || j.Contains("price");
-
-        // --- Common receipt headers in Vietnamese ---
-        bool hasVietnameseNames =
-            j.Contains("người gửi") || j.Contains("người nhận") || j.Contains("địa chỉ") ||
-            j.Contains("số điện thoại") || j.Contains("mã vận đơn");
-
-        bool hasVietnameseMoney =
-            j.Contains("tiền thu hộ") || j.Contains("tổng cộng") || j.Contains("thành tiền") ||
-            j.Contains("đơn giá") || j.Contains("số lượng") || j.Contains("stt") ;
-
-        return (hasReceipt && (hasDate || hasAmount)) || hasVietnameseNames || hasVietnameseMoney;
+        return EnglishKeywords.Any(k => normalized.Contains(k)) ||
+               VietnameseKeywords.Any(k => normalized.Contains(k));
     }
 
     private static string RowKey(IReadOnlyList<string> row) =>
@@ -120,5 +119,26 @@ public static class ReceiptCsvHelper
         return v.IndexOfAny(new[] { ',', '"', '\n', '\r' }) >= 0
             ? $"\"{v.Replace("\"", "\"\"")}\""
             : v;
+    }
+
+    // 🔹 Normalize string (remove accents, lowercase, trim)
+    private static string Normalize(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input)) return string.Empty;
+
+        var normalized = input.Normalize(NormalizationForm.FormD);
+        var sb = new StringBuilder();
+
+        foreach (var ch in normalized)
+        {
+            var unicodeCategory = CharUnicodeInfo.GetUnicodeCategory(ch);
+            if (unicodeCategory != UnicodeCategory.NonSpacingMark)
+                sb.Append(ch);
+        }
+
+        return sb.ToString()
+                 .Normalize(NormalizationForm.FormC)
+                 .ToLowerInvariant()
+                 .Trim();
     }
 }

@@ -66,7 +66,7 @@ public class UploadMultipleDeliveryReceiptsConfirm
             var file = await _uploadedFileService.CreateUploadedFileAsync(
                 userId: req.UserId,
                 fileKey: spec.FileKey,
-                fileCategory: FileCategory.Delivery_Receipt,
+                fileCategory: FileCategory.DeliveryReceipt,
                 fileExtension: fileExt,
                 ct: ct,
                 originalFileName: spec.FileName,

@@ -80,7 +80,7 @@ public class PublicBankStatementBackgroundWorker : BackgroundService
                     var csvStream = await _publicBankStatementConverter.ConvertPdfToCsvAsync(pdfStream, stoppingToken);
 
                     // 3) Upload result to S3
-                    var csvKey = StorageKeyBuilder.GetPublicResultKey(jobMessage.JobId, FileCategory.Bank_Statement);
+                    var csvKey = StorageKeyBuilder.GetPublicResultKey(jobMessage.JobId, FileCategory.BankStatement);
                     await _storage.UploadAsync(csvKey, csvStream, "text/csv", stoppingToken);
 
                     // 4) Update DB

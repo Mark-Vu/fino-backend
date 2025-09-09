@@ -5,7 +5,7 @@ namespace FinoBackend.Commons.Enums;
 public enum FileCategory
 {
     [EnumMember(Value = "bank_statement")]
-    Bank_Statement,
+    BankStatement,
     [EnumMember(Value = "delivery_receipt")]
-    Delivery_Receipt
+    DeliveryReceipt
 }

@@ -14,7 +14,7 @@ public class UploadedFile : BaseModel
     public string UploadedFileKey { get; set; } = string.Empty; 
     public FileExtension FileExtension { get; set; } = FileExtension.Pdf;
     
-    public FileCategory Category { get; set; } = FileCategory.Bank_Statement;
+    public FileCategory Category { get; set; } = FileCategory.BankStatement;
     public string OriginalFileName { get; set; } = string.Empty;
     public string? OutputFileKey { get; set; }             
 

@@ -18,6 +18,9 @@ public class PrivateBankStatementBackgroundWorker : BackgroundService
     private readonly ILogger<PrivateBankStatementBackgroundWorker> _logger;
     private readonly PrivateBankStatementConverter _privateBankStatementConverter;
 
+    // limit concurrency (e.g. max 5 parallel jobs at a time)
+    private readonly SemaphoreSlim _semaphore = new(initialCount: 5);
+
     public PrivateBankStatementBackgroundWorker(
         IAmazonSQS sqs,
         IServiceScopeFactory scopeFactory,
@@ -38,81 +41,80 @@ public class PrivateBankStatementBackgroundWorker : BackgroundService
     {
         var queueUrl = _config["SQS:BankStatementConversionQueueUrl"]
                        ?? throw new InvalidOperationException("Missing SQS:QueueUrl in configuration");
-        _logger.LogInformation("PrivateBankStatementConversionWorker started. Listening on {@QueueUrl}", queueUrl);
+        _logger.LogInformation("PrivateBankStatementConversionWorker started. Listening on {QueueUrl}", queueUrl);
 
         while (!stoppingToken.IsCancellationRequested)
         {
             var response = await _sqs.ReceiveMessageAsync(new ReceiveMessageRequest
             {
                 QueueUrl = queueUrl,
-                MaxNumberOfMessages = 10,
+                MaxNumberOfMessages = 5,
                 WaitTimeSeconds = 20
             }, stoppingToken);
 
-            if (response.Messages is null || response.Messages.Count < 1) continue;
+            if (response.Messages is null || response.Messages.Count == 0) continue;
 
-            foreach (var msg in response.Messages)
+            // process messages concurrently
+            var tasks = response.Messages.Select(msg => ProcessMessageAsync(msg, queueUrl, stoppingToken));
+            await Task.WhenAll(tasks);
+        }
+    }
+
+    private async Task ProcessMessageAsync(Message msg, string queueUrl, CancellationToken ct)
+    {
+        await _semaphore.WaitAsync(ct);
+        try
+        {
+            var jobMessage = JsonSerializer.Deserialize<PrivateConversionJobMessage>(msg.Body);
+            _logger.LogInformation("Job received {@JobMessage}", jobMessage);
+
+            if (jobMessage is null) return;
+
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+            var job = await db.ConversionJobs
+                .Include(j => j.UploadedFile)
+                .FirstOrDefaultAsync(j => j.Id == jobMessage.JobId, ct);
+
+            if (job is null) return;
+
+            job.Status = JobStatus.Processing;
+            job.StartedAt = DateTime.UtcNow;
+            await db.SaveChangesAsync(ct);
+
+            // --- Branch by FileExtension ---
+            Stream csvStream = job.UploadedFile.FileExtension switch
             {
-                try
-                {
-                    var jobMessage = JsonSerializer.Deserialize<PrivateConversionJobMessage>(msg.Body);
-                    _logger.LogInformation("Job received {@JobMessage}", jobMessage);
+                FileExtension.Pdf or FileExtension.Tiff =>
+                    await _privateBankStatementConverter.ConvertPdfOrTiffToCsvAsync(job.UploadedFile.UploadedFileKey, ct),
+                FileExtension.Jpg or FileExtension.Png =>
+                    await _privateBankStatementConverter.ConvertImageToCsvAsync(job.UploadedFile.UploadedFileKey, ct),
+                _ => throw new InvalidOperationException(
+                    $"Unsupported file type: {job.UploadedFile.FileExtension}")
+            };
 
-                    if (jobMessage is null) continue;
+            // Upload result to S3
+            var csvKey = StorageKeyBuilder.GetPrivateResultKey(jobMessage.UserId, jobMessage.JobId, FileCategory.BankStatement);
+            await _storage.UploadAsync(csvKey, csvStream, "text/csv", ct);
 
-                    using var scope = _scopeFactory.CreateScope();
-                    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            // Update DB
+            job.Status = JobStatus.Success;
+            job.FinishedAt = DateTime.UtcNow;
+            job.UploadedFile.OutputFileKey = csvKey;
+            await db.SaveChangesAsync(ct);
 
-                    var job = await db.ConversionJobs
-                        .Include(j => j.UploadedFile)
-                        .FirstOrDefaultAsync(j => j.Id == jobMessage.JobId, stoppingToken);
-
-                    if (job is null) continue;
-
-                    job.Status = JobStatus.Processing;
-                    job.StartedAt = DateTime.UtcNow;
-                    await db.SaveChangesAsync(stoppingToken);
-
-                    // --- Branch by FileExtension ---
-                    Stream csvStream;
-                    switch (job.UploadedFile.FileExtension)
-                    {
-                        case FileExtension.Pdf:
-                        case FileExtension.Tiff:
-                            csvStream = await _privateBankStatementConverter
-                                .ConvertPdfOrTiffToCsvAsync(job.UploadedFile.UploadedFileKey, stoppingToken);
-                            break;
-
-                        case FileExtension.Jpg:
-                        case FileExtension.Png:
-                            csvStream = await _privateBankStatementConverter
-                                .ConvertImageToCsvAsync(job.UploadedFile.UploadedFileKey, stoppingToken);
-                            break;
-
-                        default:
-                            throw new InvalidOperationException(
-                                $"Unsupported file type: {job.UploadedFile.FileExtension}");
-                    }
-
-                    // Upload result to S3
-                    var csvKey = StorageKeyBuilder.GetPrivateResultKey(jobMessage.UserId, jobMessage.JobId, FileCategory.Bank_Statement);
-                    await _storage.UploadAsync(csvKey, csvStream, "text/csv", stoppingToken);
-
-                    // Update DB
-                    job.Status = JobStatus.Success;
-                    job.FinishedAt = DateTime.UtcNow;
-                    job.UploadedFile.OutputFileKey = csvKey;
-                    await db.SaveChangesAsync(stoppingToken);
-
-                    // Remove message from queue
-                    await _sqs.DeleteMessageAsync(queueUrl, msg.ReceiptHandle, stoppingToken);
-                    _logger.LogInformation("Job {@JobMessage} was successfully processed", jobMessage);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Worker error while processing message");
-                }
-            }
+            // Remove message from queue
+            await _sqs.DeleteMessageAsync(queueUrl, msg.ReceiptHandle, ct);
+            _logger.LogInformation("Job {@JobMessage} was successfully processed", jobMessage);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Worker error while processing message");
+        }
+        finally
+        {
+            _semaphore.Release();
         }
     }
 }

@@ -8,16 +8,18 @@ namespace FinoBackend.Models;
 public class ConversionJob : BaseModel
 {
     public JobStatus Status { get; set; } = JobStatus.Pending;
-
     public string? ErrorMessage { get; set; }
 
+    // Public flow
     [ForeignKey(nameof(UploadedFile))]
-    public Guid UploadedFileId { get; set; }
+    public Guid? UploadedFileId { get; set; }
+    public UploadedFile? UploadedFile { get; set; }
 
-    [JsonIgnore]
-    public UploadedFile UploadedFile { get; set; } = null!;
+    // Tenant flow
+    [ForeignKey(nameof(TenantFile))]
+    public Guid? TenantFileId { get; set; }
+    public TenantFile? TenantFile { get; set; }
 
-    // Set these in code (worker/service), not with property initializers.
     public DateTime? StartedAt { get; set; }
     public DateTime? FinishedAt { get; set; }
 }

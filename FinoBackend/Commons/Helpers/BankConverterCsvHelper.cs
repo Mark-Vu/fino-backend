@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Globalization;
 using Amazon.Textract;
 using Amazon.Textract.Model;
 using Tabula;
@@ -8,16 +9,26 @@ namespace FinoBackend.Services.BankStatementConverter;
 
 public static class BankStatementCsvHelper
 {
-    // === Common for Textract (private) and Tabula (public) ===
+    // === Header keyword sets ===
+    private static readonly HashSet<string> EnglishKeywords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "date",
+        "transaction", "description", "details", "narration", "particulars"
+    };
 
+    private static readonly HashSet<string> VietnameseKeywords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        // Common column names in Vietnamese bank statements (accent-free)
+        "ngay", "mo ta", "dien giai", "noi dung", "so tien", "tai khoan", "so du"
+    };
+
+    // === Header detection ===
     public static bool LooksLikeHeader(IReadOnlyList<string> row)
     {
-        var j = string.Join(' ', row).ToLowerInvariant();
-        bool hasDate = j.Contains("date");
-        bool hasTxn = j.Contains("transaction") || j.Contains("description") ||
-                      j.Contains("details") || j.Contains("narration") ||
-                      j.Contains("particulars");
-        return hasDate && hasTxn;
+        var normalized = Normalize(string.Join(' ', row));
+
+        return EnglishKeywords.Any(k => normalized.Contains(k)) ||
+               VietnameseKeywords.Any(k => normalized.Contains(k));
     }
 
     public static string CsvEscape(string v)
@@ -51,7 +62,7 @@ public static class BankStatementCsvHelper
         return lastNonEmpty >= 0 ? cleaned.Take(lastNonEmpty + 1).ToList() : new List<string>();
     }
 
-    // === Special: Build CSV from Textract Blocks ===
+    // === Textract CSV builder ===
     public static Stream BuildCsvFromBlocks(IReadOnlyList<Block> allBlocks)
     {
         var blockMap = allBlocks.ToDictionary(b => b.Id!, b => b);
@@ -137,7 +148,7 @@ public static class BankStatementCsvHelper
         return Regex.Replace(string.Join(" ", parts), @"\s+", " ").Trim();
     }
 
-    // === Special: Build CSV from Tabula Tables ===
+    // === Tabula CSV builder ===
     public static (string csv, bool hasHeader, int dataRows) BuildCsvFromTablesPreferHeader(
         IReadOnlyList<Table> tables)
     {
@@ -198,5 +209,26 @@ public static class BankStatementCsvHelper
         }
 
         return (sb.ToString(), wroteHeader, dataRows);
+    }
+
+    // === Normalization helper ===
+    private static string Normalize(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input)) return string.Empty;
+
+        var normalized = input.Normalize(NormalizationForm.FormD);
+        var sb = new StringBuilder();
+
+        foreach (var ch in normalized)
+        {
+            var unicodeCategory = CharUnicodeInfo.GetUnicodeCategory(ch);
+            if (unicodeCategory != UnicodeCategory.NonSpacingMark)
+                sb.Append(ch);
+        }
+
+        return sb.ToString()
+                 .Normalize(NormalizationForm.FormC)
+                 .ToLowerInvariant()
+                 .Trim();
     }
 }

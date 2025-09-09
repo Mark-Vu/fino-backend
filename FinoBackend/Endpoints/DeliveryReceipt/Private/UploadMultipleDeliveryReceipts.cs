@@ -44,7 +44,7 @@ public class UploadMultipleDeliveryReceipts
             var (_, mime) = FileExtensionHelper.ToContentType(fileExt);
 
             var fileId = Guid.NewGuid();
-            var key = StorageKeyBuilder.GetPrivateUploadKey(req.UserId, fileId, FileCategory.Delivery_Receipt, fileExt);
+            var key = StorageKeyBuilder.GetPrivateUploadKey(req.UserId, fileId, FileCategory.DeliveryReceipt, fileExt);
             var url = _storage.GetPresignedPutUrl(key, mime, TimeSpan.FromMinutes(5));
             uploads.Add(new FileUploadDto(fileId, key, url));
 

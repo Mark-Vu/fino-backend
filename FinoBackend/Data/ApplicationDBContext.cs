@@ -1,3 +1,4 @@
+using FinoBackend.Commons;
 using FinoBackend.Commons.Enums;
 using Microsoft.EntityFrameworkCore;
 using FinoBackend.Models;
@@ -36,22 +37,41 @@ public class ApplicationDbContext : DbContext
             .Entity<UploadedFile>()
             .Property(b => b.FileExtension)
             .HasConversion(
-                v => v.ToString().ToLowerInvariant(),       // enum → string
+                v => v.ToNormalizedString(),       // enum → string
                 v => (FileExtension)Enum.Parse(typeof(FileExtension), v, true) // string → enum
             );
         
         modelBuilder.Entity<UploadedFile>()
             .Property(f => f.OwnerType)
             .HasConversion(
-                v => v.ToString().ToLowerInvariant(),   // to DB
+                v => v.ToNormalizedString(),   // to DB
                 v => (OwnerType)Enum.Parse(typeof(OwnerType), v, true) // from DB
             );
 
         modelBuilder.Entity<UploadedFile>()
             .Property(f => f.Category)
             .HasConversion(
-                v => v.ToString().ToLowerInvariant(),   // to DB
+                v => v.ToNormalizedString(),   // to DB
                 v => (FileCategory)Enum.Parse(typeof(FileCategory), v, true) // from DB
+            );
+        modelBuilder.Entity<User>()
+            .Property(f => f.GlobalRole)
+            .HasConversion(
+                v => v.ToNormalizedString() ,
+                v => (GlobalRole)Enum.Parse(typeof(GlobalRole), v, true) // from DB
+            );
+        
+        modelBuilder.Entity<User>()
+            .Property(f => f.TenantApprovalStatus)
+            .HasConversion(
+                v => v.ToNormalizedString() ,
+                v => (TenantApprovalStatus)Enum.Parse(typeof(TenantApprovalStatus), v, true) // from DB
+            );
+        modelBuilder.Entity<User>()
+            .Property(f => f.TenantRole)
+            .HasConversion(
+                v => v.ToNormalizedString() ,
+                v => (TenantRole)Enum.Parse(typeof(TenantRole), v, true) // from DB
             );
 
     }
