@@ -1,12 +1,10 @@
 using System.Runtime.Serialization;
 
-namespace FinoBackend.Models;
+namespace FinoBackend.Commons.Enums;
 
 public enum FileExtension
 {
-    [EnumMember(Value = "pdf")]
     Pdf,
-
     [EnumMember(Value = "jpg")]
     Jpg,
 

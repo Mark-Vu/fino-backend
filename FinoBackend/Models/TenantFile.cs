@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
+using FinoBackend.Commons.Enums;
 
 namespace FinoBackend.Models;
 [Table("tenant_files")]

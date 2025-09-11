@@ -1,9 +1,7 @@
-using System.Runtime.Serialization;
+namespace FinoBackend.Commons.Enums;
 
 public enum OwnerType
 {
-    [EnumMember(Value = "auth_user")]
     AuthenticatedUser,
-    [EnumMember(Value = "anonymous")]
     Anonymous
 }

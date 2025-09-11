@@ -1,9 +1,12 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Microsoft.EntityFrameworkCore;
 
 namespace FinoBackend.Models;
 
 [Table("tenants")]
+[Index(nameof(CompanyName), IsUnique = true)]   // 👈 unique company name
+[Index(nameof(Subdomain), IsUnique = true)]
 public class Tenant : BaseModel
 {
     [Required]

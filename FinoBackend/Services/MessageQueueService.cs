@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Amazon.SQS;
 using Amazon.SQS.Model;
+using FinoBackend.Commons.Enums;
 
 namespace FinoBackend.Services;
 

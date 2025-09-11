@@ -1,5 +1,5 @@
 using FinoBackend.Common;
-using FinoBackend.Models;
+using FinoBackend.Commons.Enums;
 
 public static class FileExtensionHelper
 {

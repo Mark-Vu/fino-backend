@@ -4,8 +4,6 @@ using FastEndpoints;
 using FinoBackend.Common;
 using FinoBackend.Commons.Enums;
 using FinoBackend.Services;
-using FinoBackend.Models;
-
 namespace FinoBackend.Endpoints.BankStatementFile;
 
 public class UploadMultipleBankStatementsConfirm 

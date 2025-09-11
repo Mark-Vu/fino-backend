@@ -1,3 +1,5 @@
+namespace FinoBackend.Commons.Enums;
+
 public enum JobStatus
 {
     Pending = 0,

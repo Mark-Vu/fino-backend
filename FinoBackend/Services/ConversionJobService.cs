@@ -1,3 +1,4 @@
+using FinoBackend.Commons.Enums;
 using FinoBackend.Data;
 using FinoBackend.Models;
 using Microsoft.EntityFrameworkCore;

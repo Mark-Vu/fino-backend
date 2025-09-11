@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using FastEndpoints;
 using FinoBackend.Common;
+using FinoBackend.Commons.Enums;
 using FinoBackend.Services;
 using FinoBackend.Models;
 

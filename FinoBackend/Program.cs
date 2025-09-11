@@ -6,6 +6,7 @@ using Amazon.Textract;
 using FastEndpoints;
 using FastEndpoints.Swagger;
 using FinoBackend.Common.Extensions;
+using FinoBackend.Commons.Enums;
 using FinoBackend.Data;
 using FinoBackend.Services;
 using FinoBackend.Services.BankStatementConverter;
@@ -28,8 +29,17 @@ builder.Services.AddSingleton<IAmazonTextract>(_ => new AmazonTextractClient(aws
 // === Database ===
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
 {
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))
-        .UseSnakeCaseNamingConvention();
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"), o =>
+    {
+        o.MapEnum<FileCategory>("file_category");
+        o.MapEnum<FileExtension>("file_extension");
+        o.MapEnum<GlobalRole>("global_role");
+        o.MapEnum<TenantRole>("tenant_role");
+        o.MapEnum<TenantApprovalStatus>("tenant_approval_status");
+        o.MapEnum<OwnerType>("owner_type");
+        o.MapEnum<QueueType>("queue_type");
+    })
+    .UseSnakeCaseNamingConvention();
 });
 
 // === FastEndpoints ===

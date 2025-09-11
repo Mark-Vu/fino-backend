@@ -1,7 +1,5 @@
-using FinoBackend.Commons;
-using FinoBackend.Commons.Enums;
-using Microsoft.EntityFrameworkCore;
 using FinoBackend.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace FinoBackend.Data;
 
@@ -15,8 +13,9 @@ public class ApplicationDbContext : DbContext
     public DbSet<User> Users { get; set; }
     public DbSet<UploadedFile> UploadedFiles { get; set; }
     public DbSet<ConversionJob> ConversionJobs { get; set; }
+    public DbSet<TenantFile> TenantFiles { get; set; }
+    public DbSet<Tenant> Tenants { get; set; }
 
-    // Override SaveChanges to handle CreatedAt / UpdatedAt
     public override int SaveChanges()
     {
         UpdateTimestamps();
@@ -28,57 +27,45 @@ public class ApplicationDbContext : DbContext
         UpdateTimestamps();
         return await base.SaveChangesAsync(cancellationToken);
     }
-    
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
 
-        modelBuilder
-            .Entity<UploadedFile>()
-            .Property(b => b.FileExtension)
-            .HasConversion(
-                v => v.ToNormalizedString(),       // enum → string
-                v => (FileExtension)Enum.Parse(typeof(FileExtension), v, true) // string → enum
-            );
-        
+        // ✅ No more HasPostgresEnum<T>()
+
+        // Just tell EF which column type to use for enums
         modelBuilder.Entity<UploadedFile>()
-            .Property(f => f.OwnerType)
-            .HasConversion(
-                v => v.ToNormalizedString(),   // to DB
-                v => (OwnerType)Enum.Parse(typeof(OwnerType), v, true) // from DB
-            );
+            .Property(e => e.Category)
+            .HasColumnType("file_category");
 
         modelBuilder.Entity<UploadedFile>()
-            .Property(f => f.Category)
-            .HasConversion(
-                v => v.ToNormalizedString(),   // to DB
-                v => (FileCategory)Enum.Parse(typeof(FileCategory), v, true) // from DB
-            );
-        modelBuilder.Entity<User>()
-            .Property(f => f.GlobalRole)
-            .HasConversion(
-                v => v.ToNormalizedString() ,
-                v => (GlobalRole)Enum.Parse(typeof(GlobalRole), v, true) // from DB
-            );
-        
-        modelBuilder.Entity<User>()
-            .Property(f => f.TenantApprovalStatus)
-            .HasConversion(
-                v => v.ToNormalizedString() ,
-                v => (TenantApprovalStatus)Enum.Parse(typeof(TenantApprovalStatus), v, true) // from DB
-            );
-        modelBuilder.Entity<User>()
-            .Property(f => f.TenantRole)
-            .HasConversion(
-                v => v.ToNormalizedString() ,
-                v => (TenantRole)Enum.Parse(typeof(TenantRole), v, true) // from DB
-            );
+            .Property(e => e.FileExtension)
+            .HasColumnType("file_extension");
 
+        modelBuilder.Entity<UploadedFile>()
+            .Property(e => e.OwnerType)
+            .HasColumnType("owner_type");
+
+        modelBuilder.Entity<User>()
+            .Property(e => e.GlobalRole)
+            .HasColumnType("global_role");
+
+        modelBuilder.Entity<User>()
+            .Property(e => e.TenantRole)
+            .HasColumnType("tenant_role");
+
+        modelBuilder.Entity<User>()
+            .Property(e => e.TenantApprovalStatus)
+            .HasColumnType("tenant_approval_status");
+
+        modelBuilder.Entity<TenantFile>()
+            .Property(e => e.FileExtension)
+            .HasColumnType("file_extension");
     }
 
     private void UpdateTimestamps()
     {
-        // auto update createdAt, updatedAt and generate ID
         var entries = ChangeTracker.Entries<BaseModel>();
 
         foreach (var entry in entries)
@@ -92,7 +79,6 @@ public class ApplicationDbContext : DbContext
 
             if (entry.State == EntityState.Modified)
             {
-                // Don’t overwrite CreatedAt when updating
                 entry.Property(x => x.CreatedAt).IsModified = false;
                 entry.Entity.UpdatedAt = DateTime.UtcNow;
             }
