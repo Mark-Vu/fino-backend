@@ -9,26 +9,24 @@ namespace FinoBackend.Services.BankStatementConverter;
 
 public static class BankStatementCsvHelper
 {
-    // === Header keyword sets ===
-    private static readonly HashSet<string> EnglishKeywords = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "date",
-        "transaction", "description", "details", "narration", "particulars"
-    };
-
-    private static readonly HashSet<string> VietnameseKeywords = new(StringComparer.OrdinalIgnoreCase)
-    {
-        // Common column names in Vietnamese bank statements (accent-free)
-        "ngay", "mo ta", "dien giai", "noi dung", "so tien", "tai khoan", "so du"
-    };
-
     // === Header detection ===
     public static bool LooksLikeHeader(IReadOnlyList<string> row)
     {
-        var normalized = Normalize(string.Join(' ', row));
+        var j = string.Join(' ', row).ToLowerInvariant();
 
-        return EnglishKeywords.Any(k => normalized.Contains(k)) ||
-               VietnameseKeywords.Any(k => normalized.Contains(k));
+        bool hasDate = j.Contains("date") || j.Contains("ngay");
+        bool hasTxn = j.Contains("transaction") || j.Contains("description") ||
+                      j.Contains("details") || j.Contains("narration") ||
+                      j.Contains("particulars") || j.Contains("dien giai") ||
+                      j.Contains("noi dung");
+
+        bool hasMoney = j.Contains("withdrawal") || j.Contains("deposit") ||
+                        j.Contains("credit") || j.Contains("debit") ||
+                        j.Contains("balance") || j.Contains("so tien") ||
+                        j.Contains("so du");
+
+        // Require at least date + transaction, OR transaction + money
+        return (hasDate && hasTxn) || (hasTxn && hasMoney);
     }
 
     public static string CsvEscape(string v)
