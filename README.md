@@ -6,7 +6,8 @@ Backend for **Fino** — a multi-tenant SaaS platform that converts bank stateme
 ---
 
 ## Demo Video
-https://www.loom.com/edit/c7bef49760d1404eb6294738fcaaab1f
+https://github.com/user-attachments/assets/ef17ddd5-fb9d-4c1a-b1f0-890fea3b0883
+
 
 ## 🚀 Tech Stack
 - **.NET 10 + FastEndpoints** — REST API backend
