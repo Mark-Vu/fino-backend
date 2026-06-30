@@ -36,8 +36,4 @@
       </Content>
     </ItemGroup>
 
-    <ItemGroup>
-      <Folder Include="Endpoints\Tenant\MedipharUsa\" />
-    </ItemGroup>
-
 </Project>

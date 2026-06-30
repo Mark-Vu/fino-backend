@@ -34,8 +34,6 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
         o.MapEnum<FileCategory>("file_category");
         o.MapEnum<FileExtension>("file_extension");
         o.MapEnum<GlobalRole>("global_role");
-        o.MapEnum<TenantRole>("tenant_role");
-        o.MapEnum<TenantApprovalStatus>("tenant_approval_status");
         o.MapEnum<OwnerType>("owner_type");
         o.MapEnum<QueueType>("queue_type");
     })

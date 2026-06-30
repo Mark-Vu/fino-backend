@@ -1,7 +1,8 @@
 ﻿services:
   fino-backend:
     image: fino-backend
+    env_file:
+      - .env
     build:
       context: .
       dockerfile: fino-backend/Dockerfile
-

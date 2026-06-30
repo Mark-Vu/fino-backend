@@ -88,8 +88,8 @@ namespace fino_backend.Migrations
                     name = table.Column<string>(type: "text", nullable: false),
                     global_role = table.Column<GlobalRole>(type: "global_role", nullable: false),
                     tenant_id = table.Column<Guid>(type: "uuid", nullable: true),
-                    tenant_role = table.Column<TenantRole>(type: "tenant_role", nullable: true),
-                    tenant_approval_status = table.Column<TenantApprovalStatus>(type: "tenant_approval_status", nullable: true),
+                    tenant_role = table.Column<int>(type: "tenant_role", nullable: true),
+                    tenant_approval_status = table.Column<int>(type: "tenant_approval_status", nullable: true),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },

@@ -16,11 +16,6 @@ public class ConversionJob : BaseModel
     public Guid? UploadedFileId { get; set; }
     public UploadedFile? UploadedFile { get; set; }
 
-    // Tenant flow
-    [ForeignKey(nameof(TenantFile))]
-    public Guid? TenantFileId { get; set; }
-    public TenantFile? TenantFile { get; set; }
-
     public DateTime? StartedAt { get; set; }
     public DateTime? FinishedAt { get; set; }
 }

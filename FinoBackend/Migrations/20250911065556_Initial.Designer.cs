@@ -242,7 +242,7 @@ namespace fino_backend.Migrations
                         .HasColumnType("text")
                         .HasColumnName("name");
 
-                    b.Property<TenantApprovalStatus?>("TenantApprovalStatus")
+                    b.Property<int?>("TenantApprovalStatus")
                         .HasColumnType("tenant_approval_status")
                         .HasColumnName("tenant_approval_status");
 
@@ -250,7 +250,7 @@ namespace fino_backend.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("tenant_id");
 
-                    b.Property<TenantRole?>("TenantRole")
+                    b.Property<int?>("TenantRole")
                         .HasColumnType("tenant_role")
                         .HasColumnName("tenant_role");
 

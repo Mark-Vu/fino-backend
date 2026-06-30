@@ -13,8 +13,6 @@ public class ApplicationDbContext : DbContext
     public DbSet<User> Users { get; set; }
     public DbSet<UploadedFile> UploadedFiles { get; set; }
     public DbSet<ConversionJob> ConversionJobs { get; set; }
-    public DbSet<TenantFile> TenantFiles { get; set; }
-    public DbSet<Tenant> Tenants { get; set; }
 
     public override int SaveChanges()
     {
@@ -51,17 +49,6 @@ public class ApplicationDbContext : DbContext
             .Property(e => e.GlobalRole)
             .HasColumnType("global_role");
 
-        modelBuilder.Entity<User>()
-            .Property(e => e.TenantRole)
-            .HasColumnType("tenant_role");
-
-        modelBuilder.Entity<User>()
-            .Property(e => e.TenantApprovalStatus)
-            .HasColumnType("tenant_approval_status");
-
-        modelBuilder.Entity<TenantFile>()
-            .Property(e => e.FileExtension)
-            .HasColumnType("file_extension");
     }
 
     private void UpdateTimestamps()
