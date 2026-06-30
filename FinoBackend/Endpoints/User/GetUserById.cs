@@ -1,5 +1,4 @@
 using System.ComponentModel.DataAnnotations;
-using System.Security.Claims;
 using FastEndpoints;
 using FinoBackend.Services;
 
@@ -27,8 +26,8 @@ public class GetUserById : Endpoint<GetUserByIdRequest, GetUserByIdResponse>
     public override async Task HandleAsync(GetUserByIdRequest req, CancellationToken ct)
     {
         _logger.LogInformation("GetUserById request started {req}", req);
-        var sub = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (Guid.Parse(sub) != req.Id)
+        var sub = User.FindFirst("sub")?.Value;
+        if (!Guid.TryParse(sub, out var userId) || userId != req.Id)
         {
             await Send.ForbiddenAsync(ct); // 403 Forbidden
             return;

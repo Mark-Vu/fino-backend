@@ -45,7 +45,7 @@ builder.Services.AddFastEndpoints()
     .SwaggerDocument();
 
 builder.Services.AddAppCors();
-builder.Services.AddSupabaseAuth(builder.Configuration);
+builder.Services.AddSupabaseAuth(builder.Configuration, builder.Environment);
 
 // 1) Enable ProblemDetails everywhere
 builder.Services.AddProblemDetails(options =>
