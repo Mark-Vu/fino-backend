@@ -73,6 +73,9 @@ builder.Services.AddHostedService<PrivateDeliveryReceiptBackgroundWorker>();
 
 var app = builder.Build();
 
+app.MapGet("/", () => "welcome to fino backend")
+    .AllowAnonymous();
+
 app.UseCors(CorsPolicies.Default);
 app.UseAuthentication();
 app.UseAuthorization();

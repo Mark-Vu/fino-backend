@@ -3,7 +3,7 @@ using System.Security.Claims;
 using FastEndpoints;
 using FinoBackend.Services;
 
-namespace FinoBackend.Endpoints.Users;
+namespace FinoBackend.Endpoints.User;
 
 using Microsoft.Extensions.Logging;
 
