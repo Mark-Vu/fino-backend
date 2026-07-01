@@ -1,5 +1,4 @@
 using System.ComponentModel.DataAnnotations;
-using System.Security.Claims;
 using FastEndpoints;
 using FinoBackend.Common;
 using FinoBackend.Commons.Enums;
@@ -33,8 +32,8 @@ public class UploadMultipleBankStatement
         if (req.Files.Count == 0 || req.Files.Count > 10)
             throw new BadRequestException("Must request between 1 and 10 files");
 
-        var sub = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (Guid.Parse(sub) != req.UserId)
+        var sub = User.FindFirst("sub")?.Value;
+        if (!Guid.TryParse(sub, out var authUserId) || authUserId != req.UserId)
             throw new UnauthorizedException();
         var uploads = new List<FileUploadDto>();
 
@@ -45,7 +44,7 @@ public class UploadMultipleBankStatement
             var (_, mime) = FileExtensionHelper.ToContentType(fileExt);
 
             var fileId = Guid.NewGuid();
-            var key = StorageKeyBuilder.GetPrivateUploadKey(req.UserId, fileId, FileCategory.BankStatement, FileExtension.Pdf);
+            var key = StorageKeyBuilder.GetPrivateUploadKey(req.UserId, fileId, FileCategory.BankStatement, fileExt);
             var url = _storage.GetPresignedPutUrl(key, mime, TimeSpan.FromMinutes(5));
             uploads.Add(new FileUploadDto(fileId, key, url));
 

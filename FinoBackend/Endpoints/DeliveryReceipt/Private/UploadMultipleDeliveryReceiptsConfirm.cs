@@ -1,5 +1,4 @@
 using System.ComponentModel.DataAnnotations;
-using System.Security.Claims;
 using FastEndpoints;
 using FinoBackend.Common;
 using FinoBackend.Commons.Enums;
@@ -40,7 +39,7 @@ public class UploadMultipleDeliveryReceiptsConfirm
     {
         _logger.LogInformation("Confirming batch upload for DeliveryReceipts");
 
-        var sub = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        var sub = User.FindFirst("sub")?.Value;
         if (!Guid.TryParse(sub, out var authUserId) || authUserId != req.UserId)
             throw new UnauthorizedException();
 

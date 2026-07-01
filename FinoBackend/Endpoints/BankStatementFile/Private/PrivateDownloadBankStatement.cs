@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using FastEndpoints;
 using FinoBackend.Common;
 using FinoBackend.Services;
@@ -27,7 +26,9 @@ public class PrivateDownloadBankStatementCsv
     public override async Task HandleAsync(PrivateDownloadBankStatementCsvRequest req, CancellationToken ct)
     {
         _logger.LogInformation("Starting DownloadBankStatementCsv file {FileId}", req.FileId);
-        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+        var sub = User.FindFirst("sub")?.Value;
+        if (!Guid.TryParse(sub, out var userId))
+            throw new UnauthorizedException();
 
         // look up file from DB (ensure it belongs to user)
         var file = await _uploadedFileService.GetUploadedFileByIdAsync(req.FileId, ct);

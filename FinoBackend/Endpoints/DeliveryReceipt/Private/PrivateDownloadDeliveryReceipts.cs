@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using FastEndpoints;
 using FinoBackend.Common;
 using FinoBackend.Services;
@@ -30,7 +29,9 @@ public class PrivateDownloadDeliveryReceiptCsv
     public override async Task HandleAsync(PrivateDownloadDeliveryReceiptCsvRequest req, CancellationToken ct)
     {
         _logger.LogInformation("Starting DownloadDeliveryReceiptCsv file {FileId}", req.FileId);
-        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier));
+        var sub = User.FindFirst("sub")?.Value;
+        if (!Guid.TryParse(sub, out var userId))
+            throw new UnauthorizedException();
 
         var file = await _uploadedFileService.GetUploadedFileByIdAsync(req.FileId, ct);
         if (file is null)

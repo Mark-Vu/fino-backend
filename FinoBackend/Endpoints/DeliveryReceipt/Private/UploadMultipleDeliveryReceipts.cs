@@ -1,5 +1,4 @@
 using System.ComponentModel.DataAnnotations;
-using System.Security.Claims;
 using FastEndpoints;
 using FinoBackend.Common;
 using FinoBackend.Commons.Enums;
@@ -32,8 +31,8 @@ public class UploadMultipleDeliveryReceipts
         if (req.Files.Count == 0 || req.Files.Count > 10)
             throw new BadRequestException("Must request between 1 and 10 files");
 
-        var sub = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (Guid.Parse(sub) != req.UserId)
+        var sub = User.FindFirst("sub")?.Value;
+        if (!Guid.TryParse(sub, out var authUserId) || authUserId != req.UserId)
             throw new UnauthorizedException();
 
         var uploads = new List<FileUploadDto>();
