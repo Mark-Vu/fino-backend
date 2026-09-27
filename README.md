@@ -2,6 +2,7 @@
 
 Backend for **Fino** — a multi-tenant SaaS platform that converts bank statements and receipts into structured CSV files, with tenant isolation and secure data handling.  
 👉 [finotools.app](https://finotools.app)
+<img width="1774" height="887" alt="fino-architecture" src="https://github.com/user-attachments/assets/007fcca1-0583-4634-b7ce-3d5a6b240f70" />
 
 ---
 
