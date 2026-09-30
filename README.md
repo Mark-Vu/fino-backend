@@ -5,9 +5,8 @@ Backend for **Fino** — a multi-tenant SaaS platform that converts bank stateme
 
 ## Architecture
 ### Application 
-<img width="1774" height="887" alt="fino-architecture" src="https://github.com/user-attachments/assets/007fcca1-0583-4634-b7ce-3d5a6b240f70" />
-
-### Zero-downtime Deployment 
+<img width="1783" height="882" alt="image" src="https://github.com/user-attachments/assets/33604b84-a81c-4c96-a082-dc896dc87931" />
+### Deployment 
 <img width="1670" height="942" alt="image" src="https://github.com/user-attachments/assets/0edd111e-c5d4-4093-b803-060465b79f7d" />
 
 
