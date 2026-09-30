@@ -7,8 +7,9 @@ Backend for **Fino** — a multi-tenant SaaS platform that converts bank stateme
 ### Application 
 <img width="1774" height="887" alt="fino-architecture" src="https://github.com/user-attachments/assets/007fcca1-0583-4634-b7ce-3d5a6b240f70" />
 
-### Deployment 
-<img width="1774" height="887" alt="image" src="https://github.com/user-attachments/assets/bc5b2271-8d3e-46f3-afe1-5b67da7ff198" />
+### Zero-downtime Deployment 
+<img width="1670" height="942" alt="image" src="https://github.com/user-attachments/assets/0edd111e-c5d4-4093-b803-060465b79f7d" />
+
 
 ---
 
@@ -19,17 +20,15 @@ https://github.com/user-attachments/assets/ef17ddd5-fb9d-4c1a-b1f0-890fea3b0883
 ## 🚀 Tech Stack
 - **.NET 10 + FastEndpoints** — REST API backend
 - **PostgreSQL (Supabase)** — database and authentication
-- **AWS (S3, SQS, Textract, ECS)** — file storage, queueing, OCR, and deployment
+- **AWS (S3, SQS, Textract, EC2)** — file storage, queueing, OCR, and deployment
 - **Terraform** — infrastructure as code
 - **Docker** — containerization
 
 ---
 
 ## 🔑 Key Features
-- Multi-tenant architecture with **subdomains** (`company.finotools.app`)
 - Separate **public vs private** flows (storage + queues)
 - Secure file upload → processing → CSV conversion
-- Role-based tenant management
 - CI/CD deployment to AWS
 
 ---
